@@ -23,11 +23,11 @@ Browser ──HTTPS──▶  tunnel server  ──yamux stream over WebSocket�
 
 ```bash
 # npx (no install) — one command, both roles
-npx @ur-link/tunnel server --domain tunnel.example.com
-npx @ur-link/tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok>
+npx @urlink/tunnel server --domain tunnel.example.com
+npx @urlink/tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok>
 
 # npm (global)
-npm i -g @ur-link/tunnel        # provides the `tunnel` command
+npm i -g @urlink/tunnel        # provides the `tunnel` command
 
 # Homebrew
 brew install ur-link/tap/tunnel

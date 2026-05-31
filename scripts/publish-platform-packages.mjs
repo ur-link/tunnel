@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const version = process.argv[2] ?? "";
-const distRoot = join("npm", "dist", "@ur-link");
+const distRoot = join("npm", "dist", "@urlink");
 if (!existsSync(distRoot)) {
   console.error(`missing ${distRoot} — run npm/build-platform-packages.mjs first`);
   process.exit(1);
@@ -30,11 +30,11 @@ for (const name of pkgs) {
   const dir = join(distRoot, name);
   const args = ["publish", "--access", "public"];
   if (provenance) args.push("--provenance");
-  console.log(`\n→ (@ur-link/${name}) npm ${args.join(" ")}  ${version}`);
+  console.log(`\n→ (@urlink/${name}) npm ${args.join(" ")}  ${version}`);
   const res = spawnSync("npm", args, { stdio: "inherit", cwd: dir });
   if (res.status !== 0) {
     // Treat "already published" as non-fatal so re-runs are idempotent.
-    console.warn(`! npm publish for @ur-link/${name} exited ${res.status} (continuing)`);
+    console.warn(`! npm publish for @urlink/${name} exited ${res.status} (continuing)`);
   }
 }
 console.log(`\npublished ${pkgs.length} platform package(s)`);

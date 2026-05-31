@@ -23,7 +23,7 @@ const targets = [
 ];
 
 for (const [os, arch, archiveFile, exe, isZip] of targets) {
-  const pkgName = `@ur-link/tunnel-${os}-${arch}`;
+  const pkgName = `@urlink/tunnel-${os}-${arch}`;
   const outDir = join("npm", "dist", pkgName); // mkdir -p handles the @scope/ segment
   const binDir = join(outDir, "bin");
   mkdirSync(binDir, { recursive: true });

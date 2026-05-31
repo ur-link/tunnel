@@ -126,7 +126,7 @@ jobs:
               echo
               echo "| | |"
               echo "|---|---|"
-              echo "| npm | \`npx @ur-link/tunnel@$VER\` · [package](https://www.npmjs.com/package/@ur-link/tunnel/v/$VER) |"
+              echo "| npm | \`npx @urlink/tunnel@$VER\` · [package](https://www.npmjs.com/package/@urlink/tunnel/v/$VER) |"
               echo "| GitHub release | [v$VER](https://github.com/$REPO/releases/tag/v$VER) |"
               echo "| Homebrew | \`brew install ur-link/tap/tunnel\` |"
               echo "| Docker | \`ghcr.io/$REPO:$VER\` |"

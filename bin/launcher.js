@@ -3,7 +3,7 @@
 
 // Resolves the native `tunnel` binary and execs it. Primary path: the per-platform
 // optionalDependency package (installed automatically by npm). Fallback: download
-// the matching binary from the GitHub release and cache it — so `npx @ur-link/tunnel`
+// the matching binary from the GitHub release and cache it — so `npx @urlink/tunnel`
 // always just works, even if the optional package was skipped.
 
 const { spawnSync } = require("node:child_process");
@@ -12,7 +12,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const REPO = "ur-link/tunnel";
-const SCOPE = "@ur-link";
+const SCOPE = "@urlink";
 const VERSION = require("../package.json").version;
 
 const PLATFORM = process.platform; // 'darwin' | 'linux' | 'win32'

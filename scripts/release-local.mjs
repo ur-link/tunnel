@@ -73,4 +73,4 @@ run("node", ["scripts/publish-platform-packages.mjs", version]);
 const pub = ["publish", "--access", "public", "--provenance=false"];
 if (distTag) pub.push("--tag", distTag);
 run("npm", pub);
-console.log(`\n✓ published @ur-link/tunnel@${version}`);
+console.log(`\n✓ published @urlink/tunnel@${version}`);

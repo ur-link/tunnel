@@ -1,5 +1,5 @@
 {
-  "name": "@ur-link/tunnel",
+  "name": "@urlink/tunnel",
   "version": "0.0.1",
   "description": "Self-hosted ngrok alternative — your own tunnel server and client. yamux-over-WebSocket, runs standalone or behind Traefik/nginx.",
   "keywords": [
@@ -72,12 +72,12 @@
     "semantic-release": "^25.0.3"
   },
   "optionalDependencies": {
-    "@ur-link/tunnel-darwin-arm64": "0.0.1",
-    "@ur-link/tunnel-darwin-x64": "0.0.1",
-    "@ur-link/tunnel-linux-x64": "0.0.1",
-    "@ur-link/tunnel-linux-arm64": "0.0.1",
-    "@ur-link/tunnel-win32-x64": "0.0.1",
-    "@ur-link/tunnel-win32-arm64": "0.0.1"
+    "@urlink/tunnel-darwin-arm64": "0.0.1",
+    "@urlink/tunnel-darwin-x64": "0.0.1",
+    "@urlink/tunnel-linux-x64": "0.0.1",
+    "@urlink/tunnel-linux-arm64": "0.0.1",
+    "@urlink/tunnel-win32-x64": "0.0.1",
+    "@urlink/tunnel-win32-arm64": "0.0.1"
   },
   "packageManager": "bun@1.3.14",
   "engines": {
