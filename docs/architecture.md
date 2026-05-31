@@ -16,14 +16,57 @@ Product overview: [README](../README.md). TLS specifics: [TLS.md](TLS.md). Multi
 | `internal/web` | templ + HTMX admin console & status pages (embedded assets) |
 | `internal/logging` | slog logger (auto text/json) |
 
+## System overview
+
+```mermaid
+flowchart LR
+  B["Browser / API client"]
+  subgraph SRV["tunnel server (public edge)"]
+    E["Edge :80/:443<br/>routing + reverse proxy"]
+    C["Control :7000<br/>WebSocket + yamux"]
+    M["Metrics :9090<br/>/metrics · /_tunnel/status"]
+    RG[("registry<br/>host → session")]
+    ID[("identity store<br/>tokens · namespaces")]
+    SS[("service store<br/>persistent")]
+  end
+  subgraph CLI["tunnel client (behind NAT)"]
+    CL["client"]
+    A1["localhost:3000"]
+    A2["localhost:8080"]
+  end
+  B -->|"HTTPS, host-routed"| E
+  E --> RG
+  E -. "admin / hub UI" .-> ID
+  E -. "status" .-> SS
+  CL -->|"outbound wss + Bearer"| C
+  C --> ID
+  C --> RG
+  C --> SS
+  E ==>|"yamux stream per request"| CL
+  CL --> A1
+  CL --> A2
+```
+
 ## Data path (one public request)
 
-```
-Browser ──HTTPS──▶ edge (server)                         client                 local app
-                   host → registry → session              │                       │
-                   ReverseProxy.Transport.DialContext      │                       │
-                     = session.Open() ────────────────────┼─ yamux stream ───────▶│ dial 127.0.0.1:<port>
-                   ◀──────── full-duplex (HTTP / WS upgrade / SSE) ────────────────┴──────────▶
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant E as Edge
+  participant Rg as Registry
+  participant S as yamux session
+  participant Cl as Client
+  participant App as Local app
+  B->>E: HTTPS request (Host: web-meabed.ur.link)
+  E->>Rg: lookup(host)
+  Rg-->>E: session
+  E->>S: ReverseProxy DialContext → Open() stream
+  S-->>Cl: accept stream
+  Cl->>App: dial 127.0.0.1:3000 and relay
+  App-->>Cl: response (HTTP / WS upgrade / SSE)
+  Cl-->>S: bytes
+  S-->>E: bytes
+  E-->>B: response (FlushInterval -1; Hijack for WS/SSE)
 ```
 
 One WebSocket per client; **yamux** multiplexes one stream per inbound request. The server opens streams, the client accepts them — no per-request connection setup.
@@ -36,12 +79,50 @@ One WebSocket per client; **yamux** multiplexes one stream per inbound request. 
 4. Both wrap the conn in yamux (server = `yamux.Server`, client = `yamux.Client`); server registers `host → session`.
 5. On disconnect: client reconnects with backoff; server unregisters and marks the service offline.
 
+```mermaid
+sequenceDiagram
+  participant Cl as Client
+  participant C as Control endpoint
+  participant Rg as Registry
+  Cl->>C: wss /_tunnel/connect (Authorization: Bearer)
+  C->>C: authenticate token
+  Cl->>C: Register{name, host_header, version}
+  C->>Rg: reserve hostname (namespace-aware)
+  alt name taken / bad token
+    C-->>Cl: Response{ok:false, error}
+  else ok
+    C-->>Cl: Response{ok:true, hostname, url}
+    Note over Cl,C: both wrap the conn in yamux
+    C->>Rg: attach host → session
+    loop per inbound request, until disconnect
+      C->>Cl: Open() stream
+    end
+    Cl--xC: disconnect
+    C->>Rg: release host (mark offline)
+    Cl->>C: reconnect (backoff + jitter)
+  end
+```
+
 ## Edge host routing (`server/edge.go`)
 
 `edgeRoute(host)` strips port + base domain → `sub`, `full`:
 - `sub == "admin"` → admin console/API.
 - bare namespace label (no dot, known namespace) → that namespace's **hub** (`handleHub`).
 - otherwise → **service**: `registry.lookup(full)` → session proxy. Service hosts are `<slug>-<ns>.<domain>` (flat) or `<slug>.<ns>.<domain>` (nested).
+
+```mermaid
+flowchart TD
+  H["request Host"] --> U{"under base domain?"}
+  U -->|no| NF["404"]
+  U -->|yes| SUB["sub = host − domain"]
+  SUB --> AD{"sub == 'admin'?"}
+  AD -->|yes| ADM["admin console / API"]
+  AD -->|no| NSQ{"bare label &<br/>known namespace?"}
+  NSQ -->|yes| HUB["namespace hub<br/>(status page / API)"]
+  NSQ -->|no| REG{"registry has host?"}
+  REG -->|yes| PX["proxy to client session"]
+  REG -->|no| BG["502 — not connected"]
+```
 
 ## HTTP surfaces
 
@@ -61,3 +142,18 @@ Browser auth = the token in an httpOnly cookie (`tn_admin` / `tn_hub`); CLI/auto
 ## Reverse-proxy core
 
 `httputil.ReverseProxy` with `FlushInterval: -1` (SSE/streaming) and a `statusRecorder` exposing `Hijack`/`Flush` (WebSocket upgrades). The transport's `DialContext` opens a yamux stream to the session instead of dialing TCP — the only change from a normal reverse proxy. No hard `WriteTimeout` (would sever long-lived streams); rely on `ReadHeaderTimeout` + `IdleTimeout` + yamux keepalive.
+
+## Discovery (`tunnel auto`)
+
+`internal/discover` finds local dev servers and the client orchestrator (`client/auto.go`) opens one tunnel per service, rescanning on an interval.
+
+```mermaid
+flowchart TD
+  SC["lsof / netstat<br/>listening TCP ports"] --> CR["classify runtime<br/>(node, python, …)"]
+  CR --> PR["walk to project root<br/>(.git, package.json, go.mod…)"]
+  PR --> SL["slug = manifest name<br/>(package.json/go.mod/Cargo) else folder"]
+  SL --> GP["group by project:<br/>lowest-port proc = main (clean slug),<br/>other procs → -port, same-proc HMR collapses"]
+  GP --> PF{"project root<br/>under --path?"}
+  PF -->|no| SK["skip (contained)"]
+  PF -->|yes| EX["expose &lt;slug&gt;-&lt;ns&gt;.&lt;domain&gt;<br/>(one client per service)"]
+```

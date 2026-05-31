@@ -19,6 +19,21 @@ Status: **approved direction**, building in phases. Main domain: `ur.link`.
   - services: append/update log of `{namespace, slug, host, first_seen, last_seen, online}`
     so the hub can show offline services too. JSONL audit + compacted state file.
 
+### Host map
+
+```mermaid
+flowchart LR
+  D["ur.link (base domain)"]
+  D --> AD["admin.ur.link<br/>admin console + API"]
+  D --> HUB["meabed.ur.link<br/>namespace hub (auth-gated)"]
+  HUB --> S1["web-meabed.ur.link → :3000"]
+  HUB --> S2["api-meabed.ur.link → :8080"]
+  HUB -. "nested mode (tls=dns)" .-> N1["web.meabed.ur.link"]
+  T["token@meabed (role)"] -. owns .-> HUB
+```
+
+Default naming is single-level `<slug>-<namespace>` (one `*.ur.link` wildcard). Nested `<slug>.<namespace>` needs `tls-mode=dns` (per-namespace `*.<ns>.ur.link` certs).
+
 ### Hot reload (no dropped connections)
 The identity store and TLS file certs reload **live** when their files change on disk:
 - **Tokens / users**: a watcher reloads the identity store under lock. Active tunnels live in
