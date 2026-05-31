@@ -47,13 +47,19 @@ func (c *Client) Run(ctx context.Context) error {
 	backoff := baseBackoff
 
 	for {
-		err := c.connectAndServe(ctx)
+		established, err := c.connectAndServe(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		var fatal *fatalError
 		if errors.As(err, &fatal) {
 			return fatal
+		}
+		// A session that actually came up and later dropped is not a flapping
+		// endpoint — reset the backoff so a healthy long-lived tunnel reconnects
+		// promptly instead of inheriting a grown delay from earlier failures.
+		if established {
+			backoff = baseBackoff
 		}
 		c.log.Warn("disconnected; reconnecting", "err", err, "in", backoff.String())
 
@@ -74,8 +80,9 @@ type fatalError struct{ err error }
 func (e *fatalError) Error() string { return e.err.Error() }
 
 // connectAndServe runs one connection: dial, handshake, then serve streams
-// until the session closes.
-func (c *Client) connectAndServe(ctx context.Context) error {
+// until the session closes. The returned bool reports whether the tunnel was
+// successfully established (handshake completed) before the error occurred.
+func (c *Client) connectAndServe(ctx context.Context) (established bool, err error) {
 	url := strings.TrimRight(c.cfg.Server, "/") + proto.ControlPath
 
 	opts := &websocket.DialOptions{HTTPHeader: http.Header{}}
@@ -91,9 +98,9 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	cancel()
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
-			return &fatalError{fmt.Errorf("authentication failed (401): check --token")}
+			return false, &fatalError{fmt.Errorf("authentication failed (401): check --token")}
 		}
-		return fmt.Errorf("dial %s: %w", url, err)
+		return false, fmt.Errorf("dial %s: %w", url, err)
 	}
 	defer wsConn.CloseNow()
 
@@ -105,23 +112,23 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	reg := proto.Register{Name: c.cfg.Name, HostHeader: c.cfg.HostHeader, ClientVersion: Version}
 	_ = nc.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if err := proto.WriteMsg(nc, reg); err != nil {
-		return fmt.Errorf("send register: %w", err)
+		return false, fmt.Errorf("send register: %w", err)
 	}
 	_ = nc.SetWriteDeadline(time.Time{})
 
 	_ = nc.SetReadDeadline(time.Now().Add(10 * time.Second))
 	var resp2 proto.Response
 	if err := proto.ReadMsg(nc, &resp2); err != nil {
-		return fmt.Errorf("read response: %w", err)
+		return false, fmt.Errorf("read response: %w", err)
 	}
 	_ = nc.SetReadDeadline(time.Time{})
 	if !resp2.OK {
-		return &fatalError{fmt.Errorf("server rejected tunnel: %s", resp2.Error)}
+		return false, &fatalError{fmt.Errorf("server rejected tunnel: %s", resp2.Error)}
 	}
 
 	session, err := mux.Client(nc, 30*time.Second, 1<<20)
 	if err != nil {
-		return fmt.Errorf("yamux client: %w", err)
+		return false, fmt.Errorf("yamux client: %w", err)
 	}
 	defer session.Close()
 
@@ -133,7 +140,7 @@ func (c *Client) connectAndServe(ctx context.Context) error {
 	for {
 		stream, err := session.Accept()
 		if err != nil {
-			return fmt.Errorf("session closed: %w", err)
+			return true, fmt.Errorf("session closed: %w", err)
 		}
 		go c.handleStream(stream)
 	}
