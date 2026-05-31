@@ -35,8 +35,9 @@ brew install ur-link/tap/tunnel
 # Go
 go install github.com/ur-link/tunnel/cmd/tunnel@latest
 
-# Docker
+# Docker (GitHub Container Registry or Docker Hub)
 docker run --rm ghcr.io/ur-link/tunnel:latest version
+docker run --rm urlink/tunnel:latest version
 ```
 
 The npm package ships a tiny launcher that resolves a prebuilt binary for your platform (or downloads it from the GitHub release on first run), so `npx` always works on darwin/linux/windows × amd64/arm64.
