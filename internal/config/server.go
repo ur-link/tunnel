@@ -16,9 +16,11 @@ type Server struct {
 	HTTPSAddr      string // public HTTPS edge (standalone TLS mode)
 	ControlAddr    string // client control / WebSocket listener
 	MetricsAddr    string // Prometheus /metrics + /_tunnel/status
-	TLSMode        string // "acme" (standalone) | "off" (behind a proxy)
+	TLSMode        string // "acme" (standalone) | "file" (mounted cert) | "off" (behind a proxy)
 	TLSACMEEmail   string // Let's Encrypt account email
 	TLSCacheDir    string // ACME cert cache directory
+	TLSCertFile    string // file mode: PEM certificate (chain) path
+	TLSKeyFile     string // file mode: PEM private key path
 	TrustForwarded bool   // trust X-Forwarded-* (true behind Traefik/nginx)
 
 	Tokens    string // inline token store (see auth.go for format)
@@ -45,6 +47,8 @@ func serverDefaults() map[string]any {
 		"tls_mode":            "acme",
 		"tls_acme_email":      "",
 		"tls_cache_dir":       "", // resolved to ~/.tunnel/certs below
+		"tls_cert_file":       "",
+		"tls_key_file":        "",
 		"trust_forwarded":     false,
 		"tokens":              "",
 		"tokens_file":         "",
@@ -80,9 +84,11 @@ func RegisterServerFlags(f *pflag.FlagSet) {
 	f.String("https-addr", ":443", "public HTTPS edge listen address (tls-mode=acme)")
 	f.String("control-addr", ":7000", "client control / WebSocket listener address")
 	f.String("metrics-addr", ":9090", "Prometheus /metrics + /_tunnel/status address")
-	f.String("tls-mode", "acme", "TLS mode: acme (standalone) | off (behind proxy)")
+	f.String("tls-mode", "acme", "TLS mode: acme (standalone Let's Encrypt) | file (mounted cert) | off (behind proxy)")
 	f.String("acme-email", "", "Let's Encrypt account email (tls-mode=acme)")
 	f.String("tls-cache-dir", "", "ACME certificate cache dir (default ~/.tunnel/certs)")
+	f.String("tls-cert-file", "", "PEM certificate (chain) path (tls-mode=file)")
+	f.String("tls-key-file", "", "PEM private key path (tls-mode=file)")
 	f.Bool("trust-forwarded", false, "trust X-Forwarded-* headers (set behind Traefik/nginx)")
 	f.String("tokens", "", "inline auth tokens, e.g. 'tok1:name1|name2,tok2'")
 	f.String("tokens-file", "", "path to a file containing auth tokens")
@@ -128,6 +134,8 @@ func LoadServer(f *pflag.FlagSet) (*Server, error) {
 		TLSMode:           k.String("tls_mode"),
 		TLSACMEEmail:      firstNonEmpty(k.String("acme_email"), k.String("tls_acme_email")),
 		TLSCacheDir:       cacheDir,
+		TLSCertFile:       k.String("tls_cert_file"),
+		TLSKeyFile:        k.String("tls_key_file"),
 		TrustForwarded:    k.Bool("trust_forwarded"),
 		Tokens:            k.String("tokens"),
 		TokensRaw:         tokensRaw,
@@ -152,8 +160,12 @@ func (s *Server) validate() error {
 	}
 	switch s.TLSMode {
 	case "acme", "off":
+	case "file":
+		if s.TLSCertFile == "" || s.TLSKeyFile == "" {
+			return fmt.Errorf("tls-mode=file requires --tls-cert-file and --tls-key-file (TUNNEL_TLS_CERT_FILE/TUNNEL_TLS_KEY_FILE)")
+		}
 	default:
-		return fmt.Errorf("invalid tls-mode %q (want acme|off)", s.TLSMode)
+		return fmt.Errorf("invalid tls-mode %q (want acme|file|off)", s.TLSMode)
 	}
 	if s.RandomNameLen < 4 {
 		return fmt.Errorf("random-name-len must be >= 4")

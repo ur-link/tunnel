@@ -10,10 +10,16 @@ https_addr: ":443"              # public HTTPS edge (only used when tls_mode=acm
 control_addr: ":7000"           # client WebSocket control plane
 metrics_addr: ":9090"           # Prometheus /metrics + /_tunnel/status
 
-# --- TLS ---
-tls_mode: acme                  # "acme" (standalone, on-demand per-host certs) | "off" (behind a proxy)
-acme_email: [email protected]
-# tls_cache_dir: ~/.tunnel/certs
+# --- TLS --- (see docs/TLS.md)
+#   acme : standalone Let's Encrypt, on-demand per-host certs (TLS-ALPN-01 / HTTP-01).
+#          No wildcard / DNS-01 (autocert limitation).
+#   file : serve a cert you provide (e.g. a wildcard from DNS-01 tooling); hot-reloaded.
+#   off  : plain HTTP behind a TLS-terminating proxy (Traefik/nginx/Caddy).
+tls_mode: acme
+acme_email: [email protected]   # tls_mode=acme
+# tls_cache_dir: ~/.tunnel/certs   # tls_mode=acme cert cache (persist this!)
+# tls_cert_file: /etc/tunnel/certs/fullchain.pem  # tls_mode=file
+# tls_key_file:  /etc/tunnel/certs/key.pem        # tls_mode=file
 trust_forwarded: false          # set true when behind Traefik/nginx (tls_mode=off)
 
 # --- Auth (per-client tokens) ---

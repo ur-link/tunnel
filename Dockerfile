@@ -9,9 +9,16 @@ RUN CGO_ENABLED=0 go build -trimpath \
     -ldflags "-s -w -X main.version=${VERSION}" \
     -o /out/tunnel ./cmd/tunnel
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# Root (not :nonroot) so the standalone edge can bind :80/:443 and write the ACME
+# cache — the norm for proxy images (Caddy/Traefik). Run nonroot with mapped
+# non-privileged ports + a writable cache volume if you prefer.
+FROM gcr.io/distroless/static-debian12
 COPY --from=build /out/tunnel /usr/bin/tunnel
-# Edge HTTP / control / metrics (HTTPS 443 only used in standalone tls-mode=acme).
+# Conventional mount points (see docs/TLS.md):
+#   /etc/tunnel  -> config.yaml|json|toml, tokens, file-mode certs   (read-only)
+#   /data        -> ACME certificate cache                            (writable)
+ENV TUNNEL_TLS_CACHE_DIR=/data/certs
+# Edge HTTP / HTTPS / control / metrics.
 EXPOSE 80 443 7000 9090
 ENTRYPOINT ["/usr/bin/tunnel"]
 CMD ["server"]

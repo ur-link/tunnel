@@ -12,3 +12,4 @@ package-lock.json
 
 # secrets used by the compose examples
 deploy/secrets/
+.idea

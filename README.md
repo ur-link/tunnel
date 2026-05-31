@@ -80,6 +80,16 @@ See [`examples/server.config.yaml`](examples/server.config.yaml) and [`examples/
 
 ## Deployment
 
+**TLS modes** (full guide + copy‑paste setups in [docs/TLS.md](docs/TLS.md)):
+
+| Mode | Cert source | Wildcard / DNS‑01 | Use when |
+|------|-------------|-------------------|----------|
+| `acme` | server, on‑demand Let's Encrypt (TLS‑ALPN‑01 / HTTP‑01) | ❌ per‑host | standalone, public |
+| `file` | a cert you mount (e.g. wildcard from DNS‑01 tooling, hot‑reloaded) | ✅ | wildcard / own CA |
+| `off`  | upstream proxy terminates TLS | ✅ (proxy) | behind Traefik/nginx/Caddy |
+
+Persist `TUNNEL_TLS_CACHE_DIR` (acme cache) and mount your `config.yaml`/`tokens` under `/etc/tunnel` so restarts keep state — see [docs/TLS.md](docs/TLS.md).
+
 ### Standalone (own TLS)
 
 ```bash

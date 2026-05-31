@@ -1,0 +1,39 @@
+# Standalone server serving a certificate you provide (tls-mode=file). Use this
+# when you want a WILDCARD cert (*.tunnel.example.com) — which needs a DNS-01
+# challenge that the in-process ACME (autocert) can't do. Obtain the wildcard
+# cert with your own tooling and mount it; the server hot-reloads on renewal.
+#
+# Get a wildcard cert (examples):
+#   acme.sh --issue --dns dns_cf -d 'tunnel.example.com' -d '*.tunnel.example.com'
+#   acme.sh --install-cert -d tunnel.example.com \
+#           --fullchain-file ./certs/fullchain.pem --key-file ./certs/key.pem
+#   # or lego / certbot with a DNS plugin, or copy from Caddy's storage.
+#
+# Layout (one mounted dir ./tunnel -> /etc/tunnel):
+#   ./tunnel/certs/fullchain.pem
+#   ./tunnel/certs/key.pem
+#   ./tunnel/tokens
+#   ./tunnel/config.yaml         (optional; auto-discovered)
+#
+#   docker compose -f deploy/docker-compose.file-tls.yml up -d
+services:
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: tunnel.example.com
+      TUNNEL_TLS_MODE: file
+      TUNNEL_TLS_CERT_FILE: /etc/tunnel/certs/fullchain.pem
+      TUNNEL_TLS_KEY_FILE: /etc/tunnel/certs/key.pem
+      TUNNEL_TOKENS_FILE: /etc/tunnel/tokens
+      TUNNEL_LOG_FORMAT: json
+    ports:
+      - "80:80" # redirects to https
+      - "443:443"
+      - "7000:7000"
+      - "127.0.0.1:9090:9090"
+    volumes:
+      # Single mounted dir: certs/ (hot-reloaded on renewal) + tokens + config.yaml.
+      - ./tunnel:/etc/tunnel:ro

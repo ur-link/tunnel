@@ -47,20 +47,46 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	errc := make(chan error, 4)
+	var servers []*http.Server
 
 	control := s.newHTTPServer(s.cfg.ControlAddr, s.controlMux(), ctx)
-	edge := s.newHTTPServer(s.cfg.HTTPAddr, s.edgeHandler(), ctx)
 	metricsSrv := s.newHTTPServer(s.cfg.MetricsAddr, s.metricsMux(), ctx)
-
+	servers = append(servers, control, metricsSrv)
 	go serve(control, "control", s.cfg.ControlAddr, errc, s.log)
-	go serve(edge, "edge-http", s.cfg.HTTPAddr, errc, s.log)
 	go serve(metricsSrv, "metrics", s.cfg.MetricsAddr, errc, s.log)
 
-	// Standalone HTTPS edge with on-demand ACME certs.
-	if s.cfg.TLSMode == "acme" {
+	// The edge listeners depend on the TLS mode.
+	switch s.cfg.TLSMode {
+	case "off":
+		// Behind a TLS-terminating proxy: serve the edge in plain HTTP.
+		httpSrv := s.newHTTPServer(s.cfg.HTTPAddr, s.edgeHandler(), ctx)
+		servers = append(servers, httpSrv)
+		go serve(httpSrv, "edge-http", s.cfg.HTTPAddr, errc, s.log)
+
+	case "acme":
+		// Standalone Let's Encrypt: HTTPS edge + :80 handles ACME HTTP-01 and
+		// redirects all other traffic to HTTPS.
+		mgr := s.acmeManager()
 		httpsSrv := s.newHTTPServer(s.cfg.HTTPSAddr, s.edgeHandler(), ctx)
-		httpsSrv.TLSConfig = s.acmeTLSConfig()
+		httpsSrv.TLSConfig = mgr.TLSConfig()
+		httpSrv := s.newHTTPServer(s.cfg.HTTPAddr, mgr.HTTPHandler(redirectToHTTPS()), ctx)
+		servers = append(servers, httpsSrv, httpSrv)
 		go serveTLS(httpsSrv, "edge-https", s.cfg.HTTPSAddr, errc, s.log)
+		go serve(httpSrv, "edge-http", s.cfg.HTTPAddr, errc, s.log)
+
+	case "file":
+		// Mounted certificate (e.g. a wildcard cert from your own DNS-01 tooling):
+		// HTTPS edge + :80 redirects to HTTPS.
+		tlsCfg, err := s.fileTLSConfig()
+		if err != nil {
+			return err
+		}
+		httpsSrv := s.newHTTPServer(s.cfg.HTTPSAddr, s.edgeHandler(), ctx)
+		httpsSrv.TLSConfig = tlsCfg
+		httpSrv := s.newHTTPServer(s.cfg.HTTPAddr, redirectToHTTPS(), ctx)
+		servers = append(servers, httpsSrv, httpSrv)
+		go serveTLS(httpsSrv, "edge-https", s.cfg.HTTPSAddr, errc, s.log)
+		go serve(httpSrv, "edge-http", s.cfg.HTTPAddr, errc, s.log)
 	}
 
 	s.log.Info("tunnel server started",
@@ -74,12 +100,21 @@ func (s *Server) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		s.shutdown(control, edge, metricsSrv)
+		s.shutdown(servers...)
 		return ctx.Err()
 	case err := <-errc:
-		s.shutdown(control, edge, metricsSrv)
+		s.shutdown(servers...)
 		return err
 	}
+}
+
+// redirectToHTTPS sends any plaintext request to its https:// equivalent (308,
+// preserving method/body). Used on :80 in acme/file modes.
+func redirectToHTTPS() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host + r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusPermanentRedirect)
+	})
 }
 
 // newHTTPServer builds an http.Server whose connections inherit ctx, with a
