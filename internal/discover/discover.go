@@ -143,16 +143,16 @@ func baseSlug(l listener) string {
 	return "port-" + strconv.Itoa(l.Port)
 }
 
-func moreRecent(a, b listener) bool {
-	if a.PID != b.PID {
-		return a.PID > b.PID
-	}
-	return a.Port > b.Port
-}
-
-// buildServices filters listeners to web runtimes (unless All), applies the Path
-// containment filter, and collapses listeners of the same project into one
-// service (most-recent instance), suffixing with -<port> on slug collisions.
+// buildServices turns raw listeners into routable services (mirrors
+// portless-tailscale-proxy's discovery):
+//   - filter to web runtimes (unless All) and apply the Path containment filter;
+//   - group by project-root dir;
+//   - within a project, collapse a single process's extra ports (dev server +
+//     HMR) to that process's LOWEST port — one entry per process;
+//   - the lowest-port process is the "main" service (clean slug); every other
+//     distinct process is kept and suffixed with "-<port>" so auxiliary tools in
+//     the same folder stay reachable;
+//   - distinct projects sharing a folder name get a "-<port>" suffix to stay unique.
 func buildServices(listeners []listener, cfg Config) []Service {
 	absPath := ""
 	if cfg.Path != "" {
@@ -182,35 +182,49 @@ func buildServices(listeners []listener, cfg Config) []Service {
 		groups[key] = append(groups[key], l)
 	}
 
-	type chosen struct {
-		best listener
-		slug string
+	// Per project: one entry per process (its lowest port), sorted by port.
+	type project struct {
+		procs []listener // distinct processes, lowest-port first; procs[0] is "main"
+		slug  string
 	}
-	picks := make([]chosen, 0, len(order))
+	projects := make([]project, 0, len(order))
 	slugCounts := map[string]int{}
 	for _, key := range order {
-		ls := groups[key]
-		best := ls[0]
-		for _, l := range ls[1:] {
-			if moreRecent(l, best) {
-				best = l
+		byPID := map[int]listener{}
+		var pidOrder []int
+		for _, l := range groups[key] {
+			if cur, ok := byPID[l.PID]; !ok {
+				byPID[l.PID] = l
+				pidOrder = append(pidOrder, l.PID)
+			} else if l.Port < cur.Port {
+				byPID[l.PID] = l
 			}
 		}
-		slug := baseSlug(best)
-		picks = append(picks, chosen{best: best, slug: slug})
-		slugCounts[slug]++
+		procs := make([]listener, 0, len(pidOrder))
+		for _, pid := range pidOrder {
+			procs = append(procs, byPID[pid])
+		}
+		sort.Slice(procs, func(i, j int) bool { return procs[i].Port < procs[j].Port })
+		projects = append(projects, project{procs: procs, slug: baseSlug(procs[0])})
+		slugCounts[baseSlug(procs[0])]++
 	}
 
 	var services []Service
-	for _, p := range picks {
-		slug := p.slug
-		if slugCounts[slug] > 1 {
-			slug += "-" + strconv.Itoa(p.best.Port)
+	for _, p := range projects {
+		mainSlug := p.slug
+		if slugCounts[mainSlug] > 1 { // distinct projects share a folder name
+			mainSlug += "-" + strconv.Itoa(p.procs[0].Port)
 		}
-		services = append(services, Service{
-			Slug: slug, Port: p.best.Port, Runtime: classifyRuntime(p.best.Comm),
-			Dir: projectRootDir(p.best.Cwd), PID: p.best.PID,
-		})
+		for i, proc := range p.procs {
+			slug := mainSlug
+			if i > 0 { // secondary process → suffix to stay reachable
+				slug = mainSlug + "-" + strconv.Itoa(proc.Port)
+			}
+			services = append(services, Service{
+				Slug: slug, Port: proc.Port, Runtime: classifyRuntime(proc.Comm),
+				Dir: projectRootDir(proc.Cwd), PID: proc.PID,
+			})
+		}
 	}
 	sort.Slice(services, func(i, j int) bool { return services[i].Slug < services[j].Slug })
 	return services
