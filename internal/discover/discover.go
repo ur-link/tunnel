@@ -6,6 +6,7 @@ package discover
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,7 +134,7 @@ func slugify(name string) string {
 
 func baseSlug(l listener) string {
 	if root := projectRootDir(l.Cwd); root != "" {
-		if slug := slugify(filepath.Base(root)); slug != "" {
+		if slug := projectSlug(root); slug != "" {
 			return slug
 		}
 	}
@@ -141,6 +142,77 @@ func baseSlug(l listener) string {
 		return rt + "-" + strconv.Itoa(l.Port)
 	}
 	return "port-" + strconv.Itoa(l.Port)
+}
+
+// projectSlug derives the best slug for a project root: the declared package
+// name (package.json "name" / go.mod module / Cargo.toml / pyproject) wins over
+// the folder name, so a folder like "frontend" or "src" still maps to the real
+// project identity. Falls back to the folder basename.
+func projectSlug(root string) string {
+	if name := jsonName(filepath.Join(root, "package.json")); name != "" {
+		return slugify(stripScope(name))
+	}
+	if name := goModName(filepath.Join(root, "go.mod")); name != "" {
+		return slugify(name)
+	}
+	if name := tomlName(filepath.Join(root, "Cargo.toml")); name != "" {
+		return slugify(name)
+	}
+	if name := tomlName(filepath.Join(root, "pyproject.toml")); name != "" {
+		return slugify(name)
+	}
+	return slugify(filepath.Base(root))
+}
+
+// stripScope turns "@acme/cool-app" into "cool-app".
+func stripScope(name string) string {
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+func jsonName(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var pkg struct {
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(b, &pkg)
+	return strings.TrimSpace(pkg.Name)
+}
+
+func goModName(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if line = strings.TrimSpace(line); strings.HasPrefix(line, "module ") {
+			mod := strings.TrimSpace(strings.TrimPrefix(line, "module "))
+			return filepath.Base(mod) // last path segment
+		}
+	}
+	return ""
+}
+
+// tomlName extracts a top-level `name = "..."` (Cargo.toml / pyproject [project]).
+func tomlName(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "name") {
+			if i := strings.IndexByte(line, '='); i >= 0 {
+				return strings.Trim(strings.TrimSpace(line[i+1:]), `"'`)
+			}
+		}
+	}
+	return ""
 }
 
 // buildServices turns raw listeners into routable services (mirrors
