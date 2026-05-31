@@ -5,8 +5,25 @@
 | Mode | Who issues/serves the cert | Challenges | Wildcard? | Use when |
 |------|----------------------------|------------|-----------|----------|
 | `acme` | the tunnel server (Go `autocert`) | **TLS‑ALPN‑01** (:443), **HTTP‑01** (:80) | ❌ per‑host only | Standalone, public, ports 80/443 reachable |
+| `dns`  | the tunnel server (lego) | **DNS‑01** via your DNS provider | ✅ `*.<domain>` | You control DNS via a supported provider; want one wildcard + nested subdomains |
 | `file` | **you** (mount a cert/key) | whatever you used to obtain it (incl. **DNS‑01**) | ✅ | You want a wildcard, an internal CA, or your own ACME tooling |
 | `off`  | an upstream proxy (Traefik/nginx/Caddy) | the proxy's (often **DNS‑01** wildcard) | ✅ (proxy) | Behind a reverse proxy |
+
+### `dns` mode (built-in DNS-01 wildcard)
+```bash
+tunnel server --domain tunnel.example.com --tls-mode dns \
+  --tls-dns-provider cloudflare --acme-email you@example.com
+# provider creds via env, e.g. CF_DNS_API_TOKEN=... (see go-acme/lego provider docs)
+```
+The server obtains a single `*.tunnel.example.com` cert on demand and renews it in
+place — no per-host issuance, so no Let's Encrypt rate-limit risk. Built-in providers:
+**cloudflare, route53, digitalocean, gcloud** (add more by importing the lego provider).
+Each reads its standard env vars (`CF_DNS_API_TOKEN`, `AWS_*`, `DO_AUTH_TOKEN`, `GCE_PROJECT`).
+
+**Nested subdomains** (`--nested-subdomains`, requires `dns` mode): services are addressed
+`<slug>.<namespace>.<domain>` (e.g. `web.meabed.tunnel.example.com`) instead of the default
+single-level `<slug>-<namespace>`. The server issues a `*.<namespace>.<domain>` wildcard per
+namespace on demand. (Adds the `go-acme/lego` dependency; the binary is ~2× larger.)
 
 > **Why no built‑in DNS‑01 / wildcard in `acme` mode?** The in‑process ACME client (`golang.org/x/crypto/acme/autocert`) only implements TLS‑ALPN‑01 and HTTP‑01. Those can't issue wildcard certs. For a wildcard you either bring your own cert (`file`) or let a proxy do DNS‑01 (`off`). This keeps the binary dependency‑light while still supporting every challenge type via the right mode.
 

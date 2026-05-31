@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -14,18 +15,20 @@ import (
 func (s *Server) edgeHandler() http.Handler {
 	admin := s.adminMux()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name := s.hostToName(r.Host)
+		sub, full := s.edgeRoute(r.Host)
 		switch {
-		case name == "":
+		case sub == "":
 			s.writeEdgeIndex(w, http.StatusNotFound, fmt.Sprintf("no tunnel for host %q", r.Host))
-		case name == "admin":
+		case sub == "admin":
 			admin.ServeHTTP(w, r)
-		case s.tokens.Namespaces()[name]:
-			s.handleHub(w, r, name)
+		case !strings.Contains(sub, ".") && s.tokens.Namespaces()[sub]:
+			// Bare namespace label -> that user's hub (works in both naming modes).
+			s.handleHub(w, r, sub)
 		default:
-			sess, ok := s.reg.lookup(name + "." + s.cfg.Domain)
+			// A service: <slug>-<ns>.<domain> (flat) or <slug>.<ns>.<domain> (nested).
+			sess, ok := s.reg.lookup(full)
 			if !ok {
-				s.writeEdgeIndex(w, http.StatusBadGateway, fmt.Sprintf("tunnel %q is not connected", name))
+				s.writeEdgeIndex(w, http.StatusBadGateway, fmt.Sprintf("tunnel %q is not connected", sub))
 				return
 			}
 			sess.ServeHTTP(w, r)

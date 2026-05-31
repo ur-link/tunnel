@@ -95,6 +95,20 @@ func (s *Server) Run(ctx context.Context) error {
 		servers = append(servers, httpsSrv, httpSrv)
 		go serveTLS(httpsSrv, "edge-https", s.cfg.HTTPSAddr, errc, s.log)
 		go serve(httpSrv, "edge-http", s.cfg.HTTPAddr, errc, s.log)
+
+	case "dns":
+		// DNS-01 wildcard certs (lego): one *.<domain> cert (or per-namespace
+		// *.<ns>.<domain> when nested), issued on demand and renewed in place.
+		mgr, err := newDNSCertMgr(s.cfg, s.log)
+		if err != nil {
+			return fmt.Errorf("dns acme: %w", err)
+		}
+		httpsSrv := s.newHTTPServer(s.cfg.HTTPSAddr, s.edgeHandler(), ctx)
+		httpsSrv.TLSConfig = mgr.TLSConfig()
+		httpSrv := s.newHTTPServer(s.cfg.HTTPAddr, redirectToHTTPS(), ctx)
+		servers = append(servers, httpsSrv, httpSrv)
+		go serveTLS(httpsSrv, "edge-https", s.cfg.HTTPSAddr, errc, s.log)
+		go serve(httpSrv, "edge-http", s.cfg.HTTPAddr, errc, s.log)
 	}
 
 	s.log.Info("tunnel server started",
@@ -148,36 +162,36 @@ func (s *Server) shutdown(srvs ...*http.Server) {
 	}
 }
 
-// hostToName strips the base domain and returns the leading subdomain label,
-// or "" if host is not under the configured domain.
-func (s *Server) hostToName(host string) string {
+// edgeRoute strips the port and base domain from a request host, returning the
+// subdomain part ("" if not under the domain) and the normalised full host
+// (used as the registry key).
+func (s *Server) edgeRoute(host string) (sub, full string) {
 	host = strings.ToLower(host)
 	if i := strings.IndexByte(host, ':'); i >= 0 {
-		host = host[:i] // strip port
+		host = host[:i]
 	}
 	suffix := "." + strings.ToLower(s.cfg.Domain)
 	if !strings.HasSuffix(host, suffix) {
-		return ""
+		return "", host
 	}
-	name := strings.TrimSuffix(host, suffix)
-	// Only a single-label subdomain is a tunnel (no nested dots).
-	if name == "" || strings.Contains(name, ".") {
-		return ""
-	}
-	return name
+	return strings.TrimSuffix(host, suffix), host
 }
 
 // reserveName picks and atomically reserves a hostname for a client and returns
 // the chosen (host, slug). For a namespaced token the host is
-// "<slug>-<namespace>.<domain>" (single-level, so one *.<domain> wildcard cert
-// covers everyone); otherwise it is "<slug>.<domain>". A permitted requested
-// name is honored, else a random slug is assigned.
+// "<slug>-<namespace>.<domain>" (single-level, one *.<domain> wildcard) — or
+// "<slug>.<namespace>.<domain>" when nested subdomains are enabled (needs a
+// per-namespace wildcard). Non-namespaced tokens get "<slug>.<domain>".
 func (s *Server) reserveName(requested string, info *TokenInfo) (host, slug string, ok bool) {
 	hostFor := func(label string) string {
-		if info.Namespace != "" {
+		switch {
+		case info.Namespace == "":
+			return label + "." + s.cfg.Domain
+		case s.cfg.NestedSubdomains:
+			return label + "." + info.Namespace + "." + s.cfg.Domain
+		default:
 			return label + "-" + info.Namespace + "." + s.cfg.Domain
 		}
-		return label + "." + s.cfg.Domain
 	}
 	if name := sanitizeLabel(requested); name != "" && s.tokens.NameAllowed(info, name) {
 		if h := hostFor(name); s.reg.reserve(h) {

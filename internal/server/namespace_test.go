@@ -97,3 +97,27 @@ func TestServiceStorePersistence(t *testing.T) {
 		t.Fatalf("namespace filter leaked: %+v", got)
 	}
 }
+
+func TestWildcardFor(t *testing.T) {
+	flat := &dnsCertMgr{domain: "ur.link", nested: false}
+	if got := flat.wildcardFor("web-meabed.ur.link"); got != "*.ur.link" {
+		t.Errorf("flat wildcard = %q, want *.ur.link", got)
+	}
+	nested := &dnsCertMgr{domain: "ur.link", nested: true}
+	if got := nested.wildcardFor("web.meabed.ur.link"); got != "*.meabed.ur.link" {
+		t.Errorf("nested wildcard = %q, want *.meabed.ur.link", got)
+	}
+	if got := nested.wildcardFor("meabed.ur.link"); got != "*.ur.link" {
+		t.Errorf("hub wildcard = %q, want *.ur.link", got)
+	}
+}
+
+func TestReserveNameNested(t *testing.T) {
+	s := newTestServer("ur.link", "tok@meabed")
+	s.cfg.NestedSubdomains = true
+	info, _ := s.tokens.Authenticate("tok")
+	host, slug, ok := s.reserveName("web", info)
+	if !ok || host != "web.meabed.ur.link" || slug != "web" {
+		t.Fatalf("nested reserve = host %q slug %q, want web.meabed.ur.link/web", host, slug)
+	}
+}
