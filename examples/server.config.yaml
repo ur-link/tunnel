@@ -4,6 +4,11 @@
 
 domain: tunnel.example.com      # tunnels become <name>.tunnel.example.com
 
+# How services are addressed (see docs/multi-tenant.md):
+#   subdomain : <slug>-<namespace>.<domain>  (default; one *.<domain> wildcard)
+#   path      : <namespace>.<domain>/<slug>/  (path routing + affinity cookie)
+routing_mode: subdomain
+
 # --- Listeners ---
 http_addr: ":80"                # public HTTP edge
 https_addr: ":443"              # public HTTPS edge (only used when tls_mode=acme)

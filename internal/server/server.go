@@ -177,12 +177,23 @@ func (s *Server) edgeRoute(host string) (sub, full string) {
 	return strings.TrimSuffix(host, suffix), host
 }
 
-// reserveName picks and atomically reserves a hostname for a client and returns
-// the chosen (host, slug). For a namespaced token the host is
-// "<slug>-<namespace>.<domain>" (single-level, one *.<domain> wildcard) — or
-// "<slug>.<namespace>.<domain>" when nested subdomains are enabled (needs a
-// per-namespace wildcard). Non-namespaced tokens get "<slug>.<domain>".
-func (s *Server) reserveName(requested string, info *TokenInfo) (host, slug string, ok bool) {
+// reservation is an assigned, registry-reserved address for a service.
+type reservation struct {
+	Key  string // registry key: the host (subdomain mode) or "<ns>.<domain>/<slug>" (path mode)
+	Host string // public host (for Host/X-Forwarded-Host headers)
+	Slug string // service slug
+	URL  string // public URL: https://<host> or https://<host>/<slug>/
+}
+
+// reserveName picks and atomically reserves an address for a client. Addressing
+// depends on routing mode:
+//   - subdomain: "<slug>-<namespace>.<domain>" (flat), "<slug>.<namespace>.<domain>"
+//     (nested), or "<slug>.<domain>" (no namespace).
+//   - path: "<namespace>.<domain>/<slug>/" (namespaced tokens); non-namespaced
+//     tokens fall back to subdomain addressing.
+//
+// A permitted requested name is honored, else a random slug is assigned.
+func (s *Server) reserveName(requested string, info *TokenInfo) (reservation, bool) {
 	hostFor := func(label string) string {
 		switch {
 		case info.Namespace == "":
@@ -193,19 +204,32 @@ func (s *Server) reserveName(requested string, info *TokenInfo) (host, slug stri
 			return label + "-" + info.Namespace + "." + s.cfg.Domain
 		}
 	}
-	if name := sanitizeLabel(requested); name != "" && s.tokens.NameAllowed(info, name) {
-		if h := hostFor(name); s.reg.reserve(h) {
-			return h, name, true
+	pick := func(label string) (reservation, bool) {
+		if s.cfg.RoutingMode == "path" && info.Namespace != "" {
+			host := info.Namespace + "." + s.cfg.Domain
+			key := host + "/" + label
+			if s.reg.reserve(key) {
+				return reservation{Key: key, Host: host, Slug: label, URL: "https://" + host + "/" + label + "/"}, true
+			}
+			return reservation{}, false
 		}
-		// Requested name is taken; fall through to a random assignment.
+		host := hostFor(label)
+		if s.reg.reserve(host) {
+			return reservation{Key: host, Host: host, Slug: label, URL: "https://" + host}, true
+		}
+		return reservation{}, false
+	}
+	if name := sanitizeLabel(requested); name != "" && !reservedSlug(name) && s.tokens.NameAllowed(info, name) {
+		if r, ok := pick(name); ok {
+			return r, true
+		}
 	}
 	for i := 0; i < 16; i++ {
-		label := randomName(s.cfg.RandomNameLen)
-		if h := hostFor(label); s.reg.reserve(h) {
-			return h, label, true
+		if r, ok := pick(randomName(s.cfg.RandomNameLen)); ok {
+			return r, true
 		}
 	}
-	return "", "", false
+	return reservation{}, false
 }
 
 // watchTokens hot-reloads the tokens file when it changes on disk, so adding or

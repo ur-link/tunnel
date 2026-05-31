@@ -34,6 +34,15 @@ flowchart LR
 
 Default naming is single-level `<slug>-<namespace>` (one `*.ur.link` wildcard). Nested `<slug>.<namespace>` needs `tls-mode=dns` (per-namespace `*.<ns>.ur.link` certs).
 
+## Routing modes (`routing_mode`)
+
+| Mode | Service address | Notes |
+|---|---|---|
+| `subdomain` (default) | `<slug>-<ns>.<domain>` (or nested `<slug>.<ns>.<domain>`) | host-routed; needs a wildcard cert |
+| `path` | `<ns>.<domain>/<slug>/` | the namespace host routes by first path segment; sets a `tn_route` affinity cookie so an app's prefix-less asset/API requests follow the last service. Only needs `*.<domain>` (one level). Reserved slugs: `admin login logout api partials _static _tunnel healthz connect`. |
+
+Both modes share the same client and tokens — the server decides addressing. The status/admin pages and `/api/...` work in either mode; in path mode they live under reserved paths on the namespace host.
+
 ### Hot reload (no dropped connections)
 The identity store and TLS file certs reload **live** when their files change on disk:
 - **Tokens / users**: a watcher reloads the identity store under lock. Active tunnels live in

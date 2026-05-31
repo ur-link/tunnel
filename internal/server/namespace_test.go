@@ -2,6 +2,7 @@ package server
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ur-link/tunnel/internal/config"
@@ -22,26 +23,23 @@ func TestReserveNameNamespaced(t *testing.T) {
 	if info.Namespace != "meabed" {
 		t.Fatalf("namespace = %q, want meabed", info.Namespace)
 	}
-	host, slug, ok := s.reserveName("web", info)
-	if !ok || host != "web-meabed.ur.link" || slug != "web" {
-		t.Fatalf("got host=%q slug=%q ok=%v, want web-meabed.ur.link/web", host, slug, ok)
+	res, ok := s.reserveName("web", info)
+	if !ok || res.Host != "web-meabed.ur.link" || res.Slug != "web" {
+		t.Fatalf("got %+v ok=%v, want web-meabed.ur.link/web", res, ok)
 	}
 	// Same name again collides -> random slug, still in the namespace.
-	host2, _, ok := s.reserveName("web", info)
-	if !ok || host2 == host || filepath.Ext(host2) == "" {
-		t.Fatalf("expected a distinct namespaced host, got %q", host2)
-	}
-	if got := host2[len(host2)-len("-meabed.ur.link"):]; got != "-meabed.ur.link" {
-		t.Fatalf("random fallback %q not in namespace", host2)
+	res2, ok := s.reserveName("web", info)
+	if !ok || res2.Host == res.Host || !strings.HasSuffix(res2.Host, "-meabed.ur.link") {
+		t.Fatalf("expected a distinct namespaced host, got %q", res2.Host)
 	}
 }
 
 func TestReserveNameLegacyFlat(t *testing.T) {
 	s := newTestServer("ur.link", "plain")
 	info, _ := s.tokens.Authenticate("plain")
-	host, slug, ok := s.reserveName("api", info)
-	if !ok || host != "api.ur.link" || slug != "api" {
-		t.Fatalf("got host=%q slug=%q, want api.ur.link/api", host, slug)
+	res, ok := s.reserveName("site", info)
+	if !ok || res.Host != "site.ur.link" || res.Slug != "site" {
+		t.Fatalf("got %+v, want site.ur.link/site", res)
 	}
 }
 
@@ -80,7 +78,7 @@ func TestTokenStoreReload(t *testing.T) {
 func TestServiceStorePersistence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.json")
 	s1 := newServiceStore(path)
-	s1.markOnline("meabed", "web", "web-meabed.ur.link", "Web")
+	s1.markOnline("web-meabed.ur.link", "meabed", "web", "web-meabed.ur.link", "https://web-meabed.ur.link", "Web")
 	if recs := s1.list("meabed"); len(recs) != 1 || !recs[0].Online {
 		t.Fatalf("expected 1 online record, got %+v", recs)
 	}
@@ -116,8 +114,18 @@ func TestReserveNameNested(t *testing.T) {
 	s := newTestServer("ur.link", "tok@meabed")
 	s.cfg.NestedSubdomains = true
 	info, _ := s.tokens.Authenticate("tok")
-	host, slug, ok := s.reserveName("web", info)
-	if !ok || host != "web.meabed.ur.link" || slug != "web" {
-		t.Fatalf("nested reserve = host %q slug %q, want web.meabed.ur.link/web", host, slug)
+	res, ok := s.reserveName("web", info)
+	if !ok || res.Host != "web.meabed.ur.link" || res.Slug != "web" {
+		t.Fatalf("nested reserve = %+v, want web.meabed.ur.link/web", res)
+	}
+}
+
+func TestReserveNamePathMode(t *testing.T) {
+	s := newTestServer("ur.link", "tok@meabed")
+	s.cfg.RoutingMode = "path"
+	info, _ := s.tokens.Authenticate("tok")
+	res, ok := s.reserveName("web", info)
+	if !ok || res.Host != "meabed.ur.link" || res.Key != "meabed.ur.link/web" || res.URL != "https://meabed.ur.link/web/" {
+		t.Fatalf("path reserve = %+v, want host meabed.ur.link key meabed.ur.link/web", res)
 	}
 }

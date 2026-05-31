@@ -36,7 +36,7 @@ func (s *Server) serviceRows(namespace string) []web.ServiceRow {
 	rows := make([]web.ServiceRow, 0, len(recs))
 	for _, rec := range recs {
 		row := web.ServiceRow{
-			Host: rec.Host, Namespace: rec.Namespace, Online: rec.Online,
+			Host: rec.Host, URL: rec.URL, Namespace: rec.Namespace, Online: rec.Online,
 			LastSeen: humanSince(rec.LastSeen),
 		}
 		if sess, ok := live[rec.Host]; ok {
@@ -126,6 +126,18 @@ func (s *Server) adminPartialServices(w http.ResponseWriter, r *http.Request) {
 
 // --- hub web handlers (per-namespace status page) ---
 
+// hubLogin authenticates a namespace token from the login form and sets the
+// hub cookie (used by both subdomain and path routing modes).
+func (s *Server) hubLogin(w http.ResponseWriter, r *http.Request, namespace string) {
+	token := r.FormValue("token")
+	if info, ok := s.tokens.Authenticate(token); ok && (info.Namespace == namespace || info.Role == RoleAdmin) {
+		setAuthCookie(w, hubCookie, token)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	web.Login(w, r, namespace, "/login", "Invalid token for this namespace.")
+}
+
 func (s *Server) hubAuthed(r *http.Request, namespace string) bool {
 	info, ok := s.tokens.Authenticate(tokenFromRequest(r, hubCookie))
 	return ok && (info.Namespace == namespace || info.Role == RoleAdmin)
@@ -138,13 +150,7 @@ func (s *Server) handleHubWeb(w http.ResponseWriter, r *http.Request, namespace 
 	case r.URL.Path == "/_static/htmx.min.js":
 		web.Static(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/login":
-		token := r.FormValue("token")
-		if info, ok := s.tokens.Authenticate(token); ok && (info.Namespace == namespace || info.Role == RoleAdmin) {
-			setAuthCookie(w, hubCookie, token)
-			http.Redirect(w, r, "/", http.StatusSeeOther)
-			return
-		}
-		web.Login(w, r, namespace, "/login", "Invalid token for this namespace.")
+		s.hubLogin(w, r, namespace)
 	case r.URL.Path == "/partials/services":
 		if !s.hubAuthed(r, namespace) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

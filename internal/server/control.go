@@ -55,40 +55,39 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = nc.SetReadDeadline(time.Time{}) // clear deadline for the long-lived session
 
-	// 2. Reserve a hostname (honors permitted requested name, else random).
-	host, slug, ok := s.reserveName(reg.Name, info)
+	// 2. Reserve an address (honors permitted requested name, else random).
+	res, ok := s.reserveName(reg.Name, info)
 	if !ok {
-		_ = proto.WriteMsg(nc, proto.Response{OK: false, Error: "could not assign a subdomain"})
+		_ = proto.WriteMsg(nc, proto.Response{OK: false, Error: "could not assign an address"})
 		return
 	}
-	url := "https://" + host
 
 	// 3. Tell the client it's live, THEN hand the wire to yamux.
-	if err := proto.WriteMsg(nc, proto.Response{OK: true, Hostname: host, URL: url}); err != nil {
-		s.reg.release(host, nil)
+	if err := proto.WriteMsg(nc, proto.Response{OK: true, Hostname: res.Host, URL: res.URL}); err != nil {
+		s.reg.release(res.Key, nil)
 		return
 	}
 
 	session, err := mux.Server(nc, s.cfg.YamuxKeepAlive, s.cfg.YamuxWindow)
 	if err != nil {
-		s.reg.release(host, nil)
-		s.log.Warn("yamux server init failed", "host", host, "err", err)
+		s.reg.release(res.Key, nil)
+		s.log.Warn("yamux server init failed", "key", res.Key, "err", err)
 		return
 	}
 
-	sess := newSession(session, host, url, reg.HostHeader, info.Label, s.metrics, s.log)
-	s.reg.attach(host, sess)
-	s.store.markOnline(info.Namespace, slug, host, info.Label)
+	sess := newSession(session, res.Host, res.URL, reg.HostHeader, info.Label, s.metrics, s.log)
+	s.reg.attach(res.Key, sess)
+	s.store.markOnline(res.Key, info.Namespace, res.Slug, res.Host, res.URL, info.Label)
 	s.metrics.activeClients.Inc()
-	s.log.Info("tunnel registered", "host", host, "namespace", info.Namespace, "label", info.Label, "client_version", reg.ClientVersion)
+	s.log.Info("tunnel registered", "url", res.URL, "namespace", info.Namespace, "label", info.Label, "client_version", reg.ClientVersion)
 
 	// 4. Serve until the session dies, then clean up.
 	<-session.CloseChan()
 	cancel()
-	s.reg.release(host, sess)
-	s.store.markOffline(host)
+	s.reg.release(res.Key, sess)
+	s.store.markOffline(res.Key)
 	s.metrics.activeClients.Dec()
-	s.log.Info("tunnel closed", "host", host)
+	s.log.Info("tunnel closed", "url", res.URL)
 }
 
 // bearerToken extracts the auth token from the Authorization header

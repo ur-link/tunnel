@@ -12,6 +12,7 @@ type UserRow struct {
 
 type ServiceRow struct {
 	Host          string
+	URL           string
 	Namespace     string
 	Online        bool
 	Requests      int64
@@ -87,7 +88,7 @@ templ servicesTable(services []ServiceRow, showNS bool) {
 						if showNS {
 							<td data-label="Namespace" class="mono">{ orDash(s.Namespace) }</td>
 						}
-						<td data-label="Service" class="host"><a href={ templ.URL("https://" + s.Host) } target="_blank" rel="noopener">{ s.Host }</a></td>
+						<td data-label="Service" class="host"><a href={ templ.URL(s.URL) } target="_blank" rel="noopener">{ s.Host }</a></td>
 						<td data-label="Status">@statusBadge(s.Online)</td>
 						<td data-label="Requests" class="right mono">{ itoa(s.Requests) }</td>
 						<td data-label="Last seen" class="muted">{ s.LastSeen }</td>

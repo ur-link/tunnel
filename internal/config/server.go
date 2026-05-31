@@ -23,6 +23,7 @@ type Server struct {
 	TLSKeyFile       string // file mode: PEM private key path
 	TLSDNSProvider   string // dns mode: lego DNS provider name (cloudflare, route53, …)
 	NestedSubdomains bool   // <slug>.<namespace>.<domain> instead of <slug>-<namespace>
+	RoutingMode      string // "subdomain" (host-routed) | "path" (<ns>.<domain>/<slug>/…)
 	TrustForwarded   bool   // trust X-Forwarded-* (true behind Traefik/nginx)
 
 	Tokens     string // inline token store (see auth.go for format)
@@ -58,6 +59,7 @@ func serverDefaults() map[string]any {
 		"tls_key_file":        "",
 		"tls_dns_provider":    "",
 		"nested_subdomains":   false,
+		"routing_mode":        "subdomain",
 		"trust_forwarded":     false,
 		"tokens":              "",
 		"tokens_file":         "",
@@ -103,6 +105,7 @@ func RegisterServerFlags(f *pflag.FlagSet) {
 	f.String("tls-key-file", "", "PEM private key path (tls-mode=file)")
 	f.String("tls-dns-provider", "", "lego DNS-01 provider for wildcard certs, e.g. cloudflare (tls-mode=dns)")
 	f.Bool("nested-subdomains", false, "address services as <slug>.<namespace>.<domain> (needs tls-mode=dns)")
+	f.String("routing-mode", "subdomain", "how services are addressed: subdomain | path (<namespace>.<domain>/<slug>)")
 	f.Bool("trust-forwarded", false, "trust X-Forwarded-* headers (set behind Traefik/nginx)")
 	f.String("tokens", "", "inline auth tokens, e.g. 'tok1@ns1,tok2@ns2:name'")
 	f.String("tokens-file", "", "path to a file containing auth tokens (hot-reloaded)")
@@ -154,6 +157,7 @@ func LoadServer(f *pflag.FlagSet) (*Server, error) {
 		TLSKeyFile:        k.String("tls_key_file"),
 		TLSDNSProvider:    k.String("tls_dns_provider"),
 		NestedSubdomains:  k.Bool("nested_subdomains"),
+		RoutingMode:       k.String("routing_mode"),
 		TrustForwarded:    k.Bool("trust_forwarded"),
 		Tokens:            k.String("tokens"),
 		TokensRaw:         tokensRaw,
@@ -195,6 +199,13 @@ func (s *Server) validate() error {
 	}
 	if s.NestedSubdomains && s.TLSMode != "dns" && s.TLSMode != "off" {
 		return fmt.Errorf("nested-subdomains needs per-namespace wildcard certs: use tls-mode=dns (or off behind a proxy)")
+	}
+	switch s.RoutingMode {
+	case "", "subdomain":
+		s.RoutingMode = "subdomain"
+	case "path":
+	default:
+		return fmt.Errorf("invalid routing-mode %q (want subdomain|path)", s.RoutingMode)
 	}
 	if s.RandomNameLen < 4 {
 		return fmt.Errorf("random-name-len must be >= 4")

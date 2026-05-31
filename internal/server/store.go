@@ -12,9 +12,11 @@ import (
 // ServiceRecord is one tunnel's persisted state: it survives restarts so the
 // hub/status pages can show services that are currently offline too.
 type ServiceRecord struct {
+	Key       string    `json:"key"` // unique route key (host, or "<ns>/<slug>" in path mode)
 	Namespace string    `json:"namespace,omitempty"`
 	Slug      string    `json:"slug"`
 	Host      string    `json:"host"`
+	URL       string    `json:"url"` // public URL (https://host or https://host/slug/)
 	Label     string    `json:"label,omitempty"`
 	FirstSeen time.Time `json:"first_seen"`
 	LastSeen  time.Time `json:"last_seen"`
@@ -41,31 +43,36 @@ func newServiceStore(path string) *serviceStore {
 		if json.Unmarshal(b, &recs) == nil {
 			for _, r := range recs {
 				r.Online = false
-				s.recs[r.Host] = r
+				key := r.Key
+				if key == "" { // back-compat with pre-Key state files
+					key = r.Host
+				}
+				s.recs[key] = r
 			}
 		}
 	}
 	return s
 }
 
-// markOnline records (or refreshes) a live service and persists.
-func (s *serviceStore) markOnline(namespace, slug, host, label string) {
+// markOnline records (or refreshes) a live service (keyed by its unique route
+// key) and persists.
+func (s *serviceStore) markOnline(key, namespace, slug, host, url, label string) {
 	now := time.Now()
 	s.mu.Lock()
-	r, ok := s.recs[host]
+	r, ok := s.recs[key]
 	if !ok {
-		r = &ServiceRecord{Host: host, FirstSeen: now}
-		s.recs[host] = r
+		r = &ServiceRecord{Key: key, FirstSeen: now}
+		s.recs[key] = r
 	}
-	r.Namespace, r.Slug, r.Label, r.LastSeen, r.Online = namespace, slug, label, now, true
+	r.Namespace, r.Slug, r.Host, r.URL, r.Label, r.LastSeen, r.Online = namespace, slug, host, url, label, now, true
 	s.mu.Unlock()
 	s.persist()
 }
 
 // markOffline flags a service as disconnected (kept for history) and persists.
-func (s *serviceStore) markOffline(host string) {
+func (s *serviceStore) markOffline(key string) {
 	s.mu.Lock()
-	if r, ok := s.recs[host]; ok {
+	if r, ok := s.recs[key]; ok {
 		r.Online, r.LastSeen = false, time.Now()
 	}
 	s.mu.Unlock()

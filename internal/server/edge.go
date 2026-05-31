@@ -22,8 +22,13 @@ func (s *Server) edgeHandler() http.Handler {
 		case sub == "admin":
 			admin.ServeHTTP(w, r)
 		case !strings.Contains(sub, ".") && s.tokens.Namespaces()[sub]:
-			// Bare namespace label -> that user's hub (works in both naming modes).
-			s.handleHub(w, r, sub)
+			// Bare namespace label -> that user's hub. In path mode the hub host
+			// also serves the namespace's services at /<slug>/.
+			if s.cfg.RoutingMode == "path" {
+				s.handlePathNamespace(w, r, sub)
+			} else {
+				s.handleHub(w, r, sub)
+			}
 		default:
 			// A service: <slug>-<ns>.<domain> (flat) or <slug>.<ns>.<domain> (nested).
 			sess, ok := s.reg.lookup(full)
