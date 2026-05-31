@@ -1,0 +1,68 @@
+# Example: attach the tunnel server to an EXISTING Traefik via a shared external
+# network (here `bc`). Traefik itself runs elsewhere and already owns the
+# entrypoints (web/websecure) and the cert resolver (`leresolver`). This compose
+# only joins that network and exposes the two planes through Traefik labels —
+# nothing is published on the host.
+#
+#   - Edge:    *.tunnel.example.com  -> tunnel :80   (public traffic)
+#   - Control: connect.tunnel.example.com -> tunnel :7000 (client WebSocket)
+#
+# Traefik terminates TLS (wildcard via its DNS-01 resolver), so the tunnel runs
+# plain HTTP and trusts X-Forwarded-*. Replace `tunnel.example.com` and
+# `leresolver` with your domain and your Traefik cert resolver name.
+#
+#   docker compose -f deploy/docker-compose.traefik-external.yml up -d
+networks:
+  bc:
+    name: bc
+    external: true
+
+services:
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest # or urlink/tunnel:latest
+    container_name: "tunnel"
+    restart: unless-stopped
+    command: ["server"]
+    networks:
+      - bc
+    environment:
+      TUNNEL_DOMAIN: tunnel.example.com
+      TUNNEL_TLS_MODE: "off" # Traefik does TLS
+      TUNNEL_TRUST_FORWARDED: "true" # trust Traefik's X-Forwarded-*
+      TUNNEL_HTTP_ADDR: ":80"
+      TUNNEL_CONTROL_ADDR: ":7000"
+      TUNNEL_METRICS_ADDR: ":9090"
+      TUNNEL_TOKENS_FILE: /run/secrets/tokens
+      TUNNEL_LOG_FORMAT: json
+    secrets:
+      - tokens
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=bc"
+      # --- Public edge: every <sub>.tunnel.example.com -> container :80 ---
+      # v3 Host() supports a single-level wildcard subdomain (no HostRegexp needed).
+      - "traefik.http.routers.tunnel-edge-sec.rule=Host(`*.tunnel.example.com`)"
+      - "traefik.http.routers.tunnel-edge-sec.entrypoints=websecure"
+      - "traefik.http.routers.tunnel-edge-sec.tls=true"
+      - "traefik.http.routers.tunnel-edge-sec.tls.certresolver=leresolver"
+      - "traefik.http.routers.tunnel-edge-sec.tls.domains[0].main=tunnel.example.com"
+      - "traefik.http.routers.tunnel-edge-sec.tls.domains[0].sans=*.tunnel.example.com"
+      - "traefik.http.routers.tunnel-edge-sec.service=tunnel-edge"
+      - "traefik.http.routers.tunnel-edge-web.rule=Host(`*.tunnel.example.com`)"
+      - "traefik.http.routers.tunnel-edge-web.entrypoints=web"
+      - "traefik.http.routers.tunnel-edge-web.service=tunnel-edge"
+      - "traefik.http.services.tunnel-edge.loadbalancer.server.port=80"
+      # --- Control plane (client WebSocket): connect.tunnel.example.com -> :7000 ---
+      - "traefik.http.routers.tunnel-ctrl-sec.rule=Host(`connect.tunnel.example.com`)"
+      - "traefik.http.routers.tunnel-ctrl-sec.entrypoints=websecure"
+      - "traefik.http.routers.tunnel-ctrl-sec.tls=true"
+      - "traefik.http.routers.tunnel-ctrl-sec.tls.certresolver=leresolver"
+      - "traefik.http.routers.tunnel-ctrl-sec.service=tunnel-ctrl"
+      - "traefik.http.routers.tunnel-ctrl-web.rule=Host(`connect.tunnel.example.com`)"
+      - "traefik.http.routers.tunnel-ctrl-web.entrypoints=web"
+      - "traefik.http.routers.tunnel-ctrl-web.service=tunnel-ctrl"
+      - "traefik.http.services.tunnel-ctrl.loadbalancer.server.port=7000"
+
+secrets:
+  tokens:
+    file: ./secrets/tokens

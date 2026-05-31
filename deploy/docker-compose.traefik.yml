@@ -49,8 +49,10 @@ services:
     labels:
       traefik.enable: "true"
       # Public edge: every <sub>.tunnel.example.com -> tunnel :80
-      traefik.http.routers.edge.rule: "HostRegexp(`^[a-z0-9-]+\\.tunnel\\.example\\.com$`)"
+      # v3 Host() supports a single-level wildcard subdomain.
+      traefik.http.routers.edge.rule: "Host(`*.tunnel.example.com`)"
       traefik.http.routers.edge.entrypoints: websecure
+      traefik.http.routers.edge.tls: "true"
       traefik.http.routers.edge.tls.certresolver: le
       traefik.http.routers.edge.tls.domains[0].main: tunnel.example.com
       traefik.http.routers.edge.tls.domains[0].sans: "*.tunnel.example.com"
@@ -59,6 +61,7 @@ services:
       # Control plane (client WebSocket): connect.tunnel.example.com -> tunnel :7000
       traefik.http.routers.ctrl.rule: "Host(`connect.tunnel.example.com`)"
       traefik.http.routers.ctrl.entrypoints: websecure
+      traefik.http.routers.ctrl.tls: "true"
       traefik.http.routers.ctrl.tls.certresolver: le
       traefik.http.routers.ctrl.service: ctrl-svc
       traefik.http.services.ctrl-svc.loadbalancer.server.port: "7000"
