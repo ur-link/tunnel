@@ -4,9 +4,19 @@ A self-hosted [ngrok](https://ngrok.com) / Tailscale-Funnel alternative you full
 
 A public **server** (the edge) behaves like a lightweight reverse proxy. A **client** opens a single persistent outbound WebSocket to it (so it works behind NAT/firewalls). Inbound public requests are multiplexed back down that one connection over [yamux](https://github.com/hashicorp/yamux) — one logical stream per request — and the client forwards them to your local service.
 
-```
-Browser ──HTTPS──▶  tunnel server  ──yamux stream over WebSocket──▶  tunnel client ──▶ localhost:3000
-        myapp.tunnel.example.com                                         (behind NAT)
+```mermaid
+flowchart LR
+  B["Browser<br/>myapp.tunnel.example.com"]
+  subgraph SRV["tunnel server (public edge)"]
+    E["Edge :80/:443<br/>host routing + reverse proxy"]
+    C["Control :7000<br/>WebSocket + yamux"]
+    RG[("registry<br/>host → session")]
+  end
+  CL["tunnel client<br/>(behind NAT)"]
+  APP["localhost:3000"]
+  B -->|HTTPS| E --> RG
+  CL -->|"outbound wss + token"| C --> RG
+  E ==>|"yamux stream per request"| CL --> APP
 ```
 
 ## Features
@@ -130,7 +140,27 @@ Tokens carry a **namespace** (`token@meabed`) so services become `<slug>-meabed.
 
 ## Architecture & observability
 
-Packages, the request data path, the control handshake, edge host routing, and all HTTP/API surfaces (control, `/metrics`, `/_tunnel/status`, admin & hub APIs) are documented in **[docs/architecture.md](docs/architecture.md)**. In short: one WebSocket per client, yamux-multiplexed; the edge is `httputil.ReverseProxy` whose transport dials a yamux stream instead of a TCP port.
+One WebSocket per client, yamux-multiplexed; the edge is `httputil.ReverseProxy` whose transport dials a **yamux stream** instead of a TCP port. A single public request flows:
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant E as Edge
+  participant Rg as Registry
+  participant Cl as Client
+  participant App as Local app
+  B->>E: HTTPS (Host: web-meabed.ur.link)
+  E->>Rg: lookup(host) → session
+  E->>Cl: Open() yamux stream
+  Cl->>App: dial 127.0.0.1:3000, relay
+  App-->>Cl: response (HTTP / WS / SSE)
+  Cl-->>E: bytes
+  E-->>B: response (immediate flush; Hijack for WS/SSE)
+```
+
+Packages, the control handshake, edge host-routing flowchart, the discovery flow, and all HTTP/API surfaces (control, `/metrics`, `/_tunnel/status`, admin & hub APIs) — with more diagrams — are in **[docs/architecture.md](docs/architecture.md)**.
+
+**Observability:** `GET /metrics` (Prometheus: `tunnel_active_clients`, `tunnel_active_streams`, `tunnel_requests_total`, `tunnel_bytes_{in,out}_total`), `GET /_tunnel/status` (JSON tunnel list), `GET /healthz`.
 
 ## Development
 
