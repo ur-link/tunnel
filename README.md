@@ -124,28 +124,20 @@ docker run -p 80:80 -p 7000:7000 -p 9090:9090 \
   tunnel server
 ```
 
-## Architecture
+## Multi-tenant, discovery & web UI
 
-| Package | Responsibility |
-|---|---|
-| `cmd/tunnel` | CLI dispatch (`server` / `http` / `version`) |
-| `internal/config` | layered cloud-native config (defaults/file/env/flags) |
-| `internal/proto` | handshake framing (Register / Response) |
-| `internal/mux` | WebSocket↔`net.Conn` adapter + yamux session tuning |
-| `internal/server` | edge reverse proxy, control plane, registry, auth, TLS, metrics |
-| `internal/client` | persistent connect + accept-stream loop + local relay + reconnect |
+Tokens carry a **namespace** (`token@meabed`) so services become `<slug>-meabed.<domain>` and each user gets an auth-gated hub at `<namespace>.<domain>` plus an admin console at `admin.<domain>`. `tunnel auto [path]` discovers and exposes every dev server under a folder. Full design: [docs/multi-tenant.md](docs/multi-tenant.md).
 
-The edge reuses the standard `net/http/httputil.ReverseProxy` (with `FlushInterval:-1` and `Hijack` for SSE/WebSocket); the only twist is that the transport's `DialContext` opens a yamux stream to the owning client session instead of dialing a TCP port.
+## Architecture & observability
 
-## Observability
-
-- `GET /metrics` — Prometheus (`tunnel_active_clients`, `tunnel_active_streams`, `tunnel_requests_total`, `tunnel_bytes_{in,out}_total`).
-- `GET /_tunnel/status` — JSON list of live tunnels (host, label, active streams, request count, uptime).
-- `GET /healthz` on the control and metrics listeners.
+Packages, the request data path, the control handshake, edge host routing, and all HTTP/API surfaces (control, `/metrics`, `/_tunnel/status`, admin & hub APIs) are documented in **[docs/architecture.md](docs/architecture.md)**. In short: one WebSocket per client, yamux-multiplexed; the edge is `httputil.ReverseProxy` whose transport dials a yamux stream instead of a TCP port.
 
 ## Development
 
 ```bash
-go test ./...          # unit + end-to-end (HTTP, SSE, WebSocket, concurrency)
-go test -race ./internal/e2e/
+make test-race   # race suite (unit + in-process e2e: HTTP, SSE, WebSocket, concurrency)
+make lint        # gofmt + go vet
+make generate    # regenerate templ UI after editing internal/web/*.templ
 ```
+
+Contributor rules, code style, and patterns live in **[AGENT.md](AGENT.md)**; testing approach in **[docs/testing.md](docs/testing.md)**.
