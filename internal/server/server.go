@@ -29,7 +29,7 @@ type Server struct {
 
 // New constructs a Server from resolved config.
 func New(cfg *config.Server, log *slog.Logger) *Server {
-	return &Server{
+	s := &Server{
 		cfg:     cfg,
 		log:     log,
 		reg:     newRegistry(),
@@ -37,6 +37,10 @@ func New(cfg *config.Server, log *slog.Logger) *Server {
 		store:   newServiceStore(cfg.StateFile),
 		metrics: newMetrics(),
 	}
+	if err := s.tokens.SetUsersFile(cfg.UsersFile); err != nil {
+		log.Warn("users file load failed", "file", cfg.UsersFile, "err", err)
+	}
+	return s
 }
 
 // Run starts all listeners and blocks until ctx is cancelled or a listener

@@ -21,6 +21,7 @@ type TokenInfo struct {
 	Namespace string          // user namespace; services become <slug>-<namespace>
 	Role      string          // RoleUser | RoleAdmin
 	Reserved  map[string]bool // explicit reserved subdomains (legacy / non-namespaced)
+	Managed   bool            // true if backed by the writable users file (admin-editable)
 }
 
 // TokenStore authenticates tokens, resolves their namespace, and enforces
@@ -31,6 +32,7 @@ type TokenStore struct {
 	mu           sync.RWMutex
 	tokens       map[string]*TokenInfo
 	reservedBy   map[string]string // name -> owning token (non-namespaced reservations)
+	usersFile    string            // writable JSON identity store (admin CRUD target)
 	ephemeral    bool
 	EphemeralTok string
 }

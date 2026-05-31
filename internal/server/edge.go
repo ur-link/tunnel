@@ -7,21 +7,29 @@ import (
 	"time"
 )
 
-// edgeHandler serves public traffic: it maps the request Host to a tunnel and
-// proxies it to the owning client session.
+// edgeHandler serves public traffic. The leading host label decides routing:
+//   - "admin"          -> admin console / API
+//   - a known namespace -> that user's hub (status page / API)
+//   - anything else     -> a tunnel (registry lookup)
 func (s *Server) edgeHandler() http.Handler {
+	admin := s.adminMux()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := s.hostToName(r.Host)
-		if name == "" {
+		switch {
+		case name == "":
 			s.writeEdgeIndex(w, http.StatusNotFound, fmt.Sprintf("no tunnel for host %q", r.Host))
-			return
+		case name == "admin":
+			admin.ServeHTTP(w, r)
+		case s.tokens.Namespaces()[name]:
+			s.handleHub(w, r, name)
+		default:
+			sess, ok := s.reg.lookup(name + "." + s.cfg.Domain)
+			if !ok {
+				s.writeEdgeIndex(w, http.StatusBadGateway, fmt.Sprintf("tunnel %q is not connected", name))
+				return
+			}
+			sess.ServeHTTP(w, r)
 		}
-		sess, ok := s.reg.lookup(name + "." + s.cfg.Domain)
-		if !ok {
-			s.writeEdgeIndex(w, http.StatusBadGateway, fmt.Sprintf("tunnel %q is not connected", name))
-			return
-		}
-		sess.ServeHTTP(w, r)
 	})
 }
 

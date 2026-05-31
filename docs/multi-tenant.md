@@ -77,7 +77,9 @@ pipeline; assets embedded via `embed.FS` so the binary stays single-file.
    naming (`<slug>-<namespace>`) + ownership enforcement; persistent service registry
    (online/offline/last-seen); status API extended with namespace. *No behavior change for
    non-namespaced tokens.*
-2. **Admin + user APIs**: admin CRUD over the identity store; per-namespace status API.
+2. **Admin + user APIs** ✅ *done*: writable JSON identity store + CRUD/rotate;
+   admin API at `admin.<domain>` (admin-role Bearer); per-namespace hub API at
+   `<namespace>.<domain>` (own token or admin). Edge routes admin/hub/service by host.
 3. **UIs** (templ + HTMX + templui): admin console + user status page.
 4. **Discovery client** ✅ *done*: `tunnel auto [path]` ports portless scanning
    (lsof/netstat → runtime classify → project-root slug), `--path` containment
