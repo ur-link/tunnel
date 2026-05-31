@@ -98,7 +98,11 @@ jobs:
           fi
         env:
           DRY_RUN: ${{ inputs.dry-run }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer GH_PAT so the GitHub release semantic-release creates triggers
+          # downstream workflows (docker.yml). Releases made with the built-in
+          # GITHUB_TOKEN are suppressed by GitHub's recursion guard and won't fire
+          # the docker build. Falls back to GITHUB_TOKEN when no PAT is set.
+          GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
