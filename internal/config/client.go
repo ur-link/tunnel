@@ -19,7 +19,11 @@ type Client struct {
 	HostHeader string // Host presented to the local app (empty => public host)
 	Insecure   bool   // skip TLS verification (self-signed dev servers)
 
-	MaxBackoff time.Duration // reconnect backoff ceiling
+	// Reconnect tuning.
+	InitialBackoff time.Duration // first retry delay (then exponential)
+	MaxBackoff     time.Duration // reconnect backoff ceiling
+	MaxAttempts    int           // 0 = retry forever
+	Jitter         bool          // randomize backoff to avoid thundering herd
 
 	LogLevel  string
 	LogFormat string
@@ -27,17 +31,20 @@ type Client struct {
 
 func clientDefaults() map[string]any {
 	return map[string]any{
-		"config":      "",
-		"server":      "",
-		"token":       "",
-		"token_file":  "",
-		"name":        "",
-		"target":      "",
-		"host_header": "",
-		"insecure":    false,
-		"max_backoff": "30s",
-		"log_level":   "info",
-		"log_format":  "auto",
+		"config":          "",
+		"server":          "",
+		"token":           "",
+		"token_file":      "",
+		"name":            "",
+		"target":          "",
+		"host_header":     "",
+		"insecure":        false,
+		"initial_backoff": "1s",
+		"max_backoff":     "30s",
+		"max_attempts":    0,
+		"jitter":          true,
+		"log_level":       "info",
+		"log_format":      "auto",
 	}
 }
 
@@ -50,7 +57,10 @@ func RegisterClientFlags(f *pflag.FlagSet) {
 	f.String("name", "", "requested subdomain (empty => server assigns a random one)")
 	f.String("host-header", "", "Host header presented to the local app (empty => public host)")
 	f.Bool("insecure", false, "skip TLS verification of the server (dev only)")
-	f.String("max-backoff", "30s", "reconnect backoff ceiling")
+	f.String("initial-backoff", "1s", "reconnect: first retry delay")
+	f.String("max-backoff", "30s", "reconnect: backoff ceiling")
+	f.Int("max-attempts", 0, "reconnect: max attempts (0 = forever)")
+	f.Bool("jitter", true, "reconnect: randomize backoff to avoid thundering herd")
 	f.String("log-level", "info", "log level: debug|info|warn|error")
 	f.String("log-format", "auto", "log format: auto|text|json")
 }
@@ -75,15 +85,18 @@ func LoadClient(f *pflag.FlagSet, target string) (*Client, error) {
 	}
 
 	c := &Client{
-		Server:     k.String("server"),
-		Token:      token,
-		Name:       k.String("name"),
-		Target:     normalizeTarget(target),
-		HostHeader: k.String("host_header"),
-		Insecure:   k.Bool("insecure"),
-		MaxBackoff: mustDur(k.String("max_backoff"), 30*time.Second),
-		LogLevel:   k.String("log_level"),
-		LogFormat:  k.String("log_format"),
+		Server:         k.String("server"),
+		Token:          token,
+		Name:           k.String("name"),
+		Target:         normalizeTarget(target),
+		HostHeader:     k.String("host_header"),
+		Insecure:       k.Bool("insecure"),
+		InitialBackoff: mustDur(k.String("initial_backoff"), time.Second),
+		MaxBackoff:     mustDur(k.String("max_backoff"), 30*time.Second),
+		MaxAttempts:    k.Int("max_attempts"),
+		Jitter:         k.Bool("jitter"),
+		LogLevel:       k.String("log_level"),
+		LogFormat:      k.String("log_format"),
 	}
 
 	if err := c.validate(); err != nil {

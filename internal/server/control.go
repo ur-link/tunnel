@@ -56,7 +56,7 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	_ = nc.SetReadDeadline(time.Time{}) // clear deadline for the long-lived session
 
 	// 2. Reserve a hostname (honors permitted requested name, else random).
-	host, ok := s.reserveName(reg.Name, info)
+	host, slug, ok := s.reserveName(reg.Name, info)
 	if !ok {
 		_ = proto.WriteMsg(nc, proto.Response{OK: false, Error: "could not assign a subdomain"})
 		return
@@ -78,13 +78,15 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 
 	sess := newSession(session, host, url, reg.HostHeader, info.Label, s.metrics, s.log)
 	s.reg.attach(host, sess)
+	s.store.markOnline(info.Namespace, slug, host, info.Label)
 	s.metrics.activeClients.Inc()
-	s.log.Info("tunnel registered", "host", host, "label", info.Label, "client_version", reg.ClientVersion)
+	s.log.Info("tunnel registered", "host", host, "namespace", info.Namespace, "label", info.Label, "client_version", reg.ClientVersion)
 
 	// 4. Serve until the session dies, then clean up.
 	<-session.CloseChan()
 	cancel()
 	s.reg.release(host, sess)
+	s.store.markOffline(host)
 	s.metrics.activeClients.Dec()
 	s.log.Info("tunnel closed", "host", host)
 }

@@ -23,8 +23,12 @@ type Server struct {
 	TLSKeyFile     string // file mode: PEM private key path
 	TrustForwarded bool   // trust X-Forwarded-* (true behind Traefik/nginx)
 
-	Tokens    string // inline token store (see auth.go for format)
-	TokensRaw string // resolved token text (inline or from TokensFile)
+	Tokens     string // inline token store (see auth.go for format)
+	TokensRaw  string // resolved token text (inline or from TokensFile)
+	TokensFile string // path to the tokens file, if any (watched for hot-reload)
+	StateFile  string // path to the persistent service registry (empty = in-memory)
+
+	ReloadInterval time.Duration // how often to check the tokens file for changes (0 = off)
 
 	RandomNameLen     int           // length of fallback random slugs
 	YamuxKeepAlive    time.Duration // dead-peer detection interval
@@ -52,6 +56,8 @@ func serverDefaults() map[string]any {
 		"trust_forwarded":     false,
 		"tokens":              "",
 		"tokens_file":         "",
+		"state_file":          "",
+		"reload_interval":     "5s",
 		"random_name_len":     8,
 		"yamux_keepalive":     "30s",
 		"yamux_window":        1 << 20, // 1 MiB
@@ -90,8 +96,10 @@ func RegisterServerFlags(f *pflag.FlagSet) {
 	f.String("tls-cert-file", "", "PEM certificate (chain) path (tls-mode=file)")
 	f.String("tls-key-file", "", "PEM private key path (tls-mode=file)")
 	f.Bool("trust-forwarded", false, "trust X-Forwarded-* headers (set behind Traefik/nginx)")
-	f.String("tokens", "", "inline auth tokens, e.g. 'tok1:name1|name2,tok2'")
-	f.String("tokens-file", "", "path to a file containing auth tokens")
+	f.String("tokens", "", "inline auth tokens, e.g. 'tok1@ns1,tok2@ns2:name'")
+	f.String("tokens-file", "", "path to a file containing auth tokens (hot-reloaded)")
+	f.String("state-file", "", "path to persist the service registry (empty = in-memory)")
+	f.String("reload-interval", "5s", "how often to check the tokens file for changes (0 = off)")
 	f.Int("random-name-len", 8, "length of fallback random subdomain slugs")
 	f.String("yamux-keepalive", "30s", "yamux keepalive / dead-peer detection interval")
 	f.Int("yamux-window", 1<<20, "yamux per-stream flow-control window in bytes")
@@ -118,9 +126,8 @@ func LoadServer(f *pflag.FlagSet) (*Server, error) {
 		}
 	}
 
-	tokensRaw, err := readSecretFile(k.String("tokens"), firstNonEmpty(
-		k.String("tokens_file"), os.Getenv(EnvPrefix+"TOKENS_FILE"),
-	))
+	tokensFilePath := firstNonEmpty(k.String("tokens_file"), os.Getenv(EnvPrefix+"TOKENS_FILE"))
+	tokensRaw, err := readSecretFile(k.String("tokens"), tokensFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +146,9 @@ func LoadServer(f *pflag.FlagSet) (*Server, error) {
 		TrustForwarded:    k.Bool("trust_forwarded"),
 		Tokens:            k.String("tokens"),
 		TokensRaw:         tokensRaw,
+		TokensFile:        tokensFilePath,
+		StateFile:         k.String("state_file"),
+		ReloadInterval:    mustDur(k.String("reload_interval"), 5*time.Second),
 		RandomNameLen:     k.Int("random_name_len"),
 		YamuxWindow:       k.Int("yamux_window"),
 		LogLevel:          k.String("log_level"),

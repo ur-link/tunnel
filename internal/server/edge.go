@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"time"
 )
 
@@ -47,36 +46,41 @@ func (s *Server) metricsMux() http.Handler {
 
 // tunnelStatus is one entry in the status API.
 type tunnelStatus struct {
-	Host          string `json:"host"`
-	URL           string `json:"url"`
-	Label         string `json:"label,omitempty"`
-	ActiveStreams int64  `json:"active_streams"`
-	Requests      int64  `json:"requests"`
-	UptimeSeconds int64  `json:"uptime_seconds"`
+	Host          string    `json:"host"`
+	Namespace     string    `json:"namespace,omitempty"`
+	URL           string    `json:"url"`
+	Label         string    `json:"label,omitempty"`
+	Online        bool      `json:"online"`
+	ActiveStreams int64     `json:"active_streams"`
+	Requests      int64     `json:"requests"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
 }
 
 // statusResponse is the JSON body of /_tunnel/status.
 type statusResponse struct {
 	Domain  string         `json:"domain"`
-	Clients int            `json:"clients"`
-	Tunnels []tunnelStatus `json:"tunnels"`
+	Clients int            `json:"clients"` // live sessions
+	Tunnels []tunnelStatus `json:"tunnels"` // all known services (online + offline)
 }
 
-func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
-	snap := s.reg.snapshot()
-	out := statusResponse{Domain: s.cfg.Domain, Clients: len(snap)}
-	for _, sess := range snap {
-		out.Tunnels = append(out.Tunnels, tunnelStatus{
-			Host:          sess.host,
-			URL:           sess.url,
-			Label:         sess.label,
-			ActiveStreams: sess.activeStreams.Load(),
-			Requests:      sess.requests.Load(),
-			UptimeSeconds: int64(time.Since(sess.createdAt).Seconds()),
-		})
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	// ?namespace=foo restricts the listing (used by per-user status pages).
+	ns := r.URL.Query().Get("namespace")
+	live := s.reg.snapshot()
+	out := statusResponse{Domain: s.cfg.Domain, Clients: len(live)}
+	for _, rec := range s.store.list(ns) {
+		st := tunnelStatus{
+			Host: rec.Host, Namespace: rec.Namespace, URL: "https://" + rec.Host,
+			Label: rec.Label, Online: rec.Online, FirstSeen: rec.FirstSeen, LastSeen: rec.LastSeen,
+		}
+		if sess, ok := live[rec.Host]; ok {
+			st.Online = true
+			st.ActiveStreams = sess.activeStreams.Load()
+			st.Requests = sess.requests.Load()
+		}
+		out.Tunnels = append(out.Tunnels, st)
 	}
-	sort.Slice(out.Tunnels, func(i, j int) bool { return out.Tunnels[i].Host < out.Tunnels[j].Host })
-
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

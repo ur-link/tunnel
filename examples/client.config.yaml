@@ -10,7 +10,12 @@ token: sometoken                # or set token_file / TUNNEL_TOKEN_FILE
 # target: 3000                  # usually passed positionally: `tunnel http 3000`
 # host_header: localhost:3000   # Host presented to the local app (default: public host)
 # insecure: false               # skip server TLS verification (dev only)
-max_backoff: 30s
+
+# --- Reconnect (auto-reconnect with exponential backoff + jitter) ---
+initial_backoff: 1s             # first retry delay
+max_backoff: 30s                # backoff ceiling
+max_attempts: 0                 # 0 = retry forever
+jitter: true                    # randomize backoff to avoid thundering herd
 
 log_level: info
 log_format: auto

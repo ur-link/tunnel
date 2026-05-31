@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ type Server struct {
 	log     *slog.Logger
 	reg     *registry
 	tokens  *TokenStore
+	store   *serviceStore
 	metrics *metrics
 }
 
@@ -32,6 +34,7 @@ func New(cfg *config.Server, log *slog.Logger) *Server {
 		log:     log,
 		reg:     newRegistry(),
 		tokens:  NewTokenStore(cfg.TokensRaw),
+		store:   newServiceStore(cfg.StateFile),
 		metrics: newMetrics(),
 	}
 }
@@ -54,6 +57,7 @@ func (s *Server) Run(ctx context.Context) error {
 	servers = append(servers, control, metricsSrv)
 	go serve(control, "control", s.cfg.ControlAddr, errc, s.log)
 	go serve(metricsSrv, "metrics", s.cfg.MetricsAddr, errc, s.log)
+	go s.watchTokens(ctx) // hot-reload identities without dropping connections
 
 	// The edge listeners depend on the TLS mode.
 	switch s.cfg.TLSMode {
@@ -159,23 +163,61 @@ func (s *Server) hostToName(host string) string {
 	return name
 }
 
-// reserveName picks and atomically reserves a hostname for a client. It honors
-// a permitted requested name, otherwise assigns a random slug.
-func (s *Server) reserveName(requested string, info *TokenInfo) (host string, ok bool) {
+// reserveName picks and atomically reserves a hostname for a client and returns
+// the chosen (host, slug). For a namespaced token the host is
+// "<slug>-<namespace>.<domain>" (single-level, so one *.<domain> wildcard cert
+// covers everyone); otherwise it is "<slug>.<domain>". A permitted requested
+// name is honored, else a random slug is assigned.
+func (s *Server) reserveName(requested string, info *TokenInfo) (host, slug string, ok bool) {
+	hostFor := func(label string) string {
+		if info.Namespace != "" {
+			return label + "-" + info.Namespace + "." + s.cfg.Domain
+		}
+		return label + "." + s.cfg.Domain
+	}
 	if name := sanitizeLabel(requested); name != "" && s.tokens.NameAllowed(info, name) {
-		h := name + "." + s.cfg.Domain
-		if s.reg.reserve(h) {
-			return h, true
+		if h := hostFor(name); s.reg.reserve(h) {
+			return h, name, true
 		}
 		// Requested name is taken; fall through to a random assignment.
 	}
 	for i := 0; i < 16; i++ {
-		h := randomName(s.cfg.RandomNameLen) + "." + s.cfg.Domain
-		if s.reg.reserve(h) {
-			return h, true
+		label := randomName(s.cfg.RandomNameLen)
+		if h := hostFor(label); s.reg.reserve(h) {
+			return h, label, true
 		}
 	}
-	return "", false
+	return "", "", false
+}
+
+// watchTokens hot-reloads the tokens file when it changes on disk, so adding or
+// revoking identities never requires a restart. Active tunnels live in the
+// registry (independent of the token store), so reloading drops no connections.
+func (s *Server) watchTokens(ctx context.Context) {
+	if s.cfg.TokensFile == "" || s.cfg.ReloadInterval <= 0 {
+		return
+	}
+	last := modTime(s.cfg.TokensFile)
+	t := time.NewTicker(s.cfg.ReloadInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if m := modTime(s.cfg.TokensFile); m != last {
+				last = m
+				b, err := os.ReadFile(s.cfg.TokensFile)
+				if err != nil {
+					s.log.Warn("tokens reload: read failed", "err", err)
+					continue
+				}
+				if s.tokens.Reload(string(b)) {
+					s.log.Info("tokens reloaded", "file", s.cfg.TokensFile)
+				}
+			}
+		}
+	}
 }
 
 func serve(srv *http.Server, name, addr string, errc chan<- error, log *slog.Logger) {

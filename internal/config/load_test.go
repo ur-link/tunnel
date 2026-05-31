@@ -59,4 +59,11 @@ func TestClientTargetNormalization(t *testing.T) {
 	if cfg.Target != "127.0.0.1:3000" {
 		t.Errorf("target = %q, want 127.0.0.1:3000", cfg.Target)
 	}
+	// Reconnect defaults.
+	if cfg.InitialBackoff.String() != "1s" || cfg.MaxBackoff.String() != "30s" {
+		t.Errorf("backoff defaults = %v/%v, want 1s/30s", cfg.InitialBackoff, cfg.MaxBackoff)
+	}
+	if cfg.MaxAttempts != 0 || !cfg.Jitter {
+		t.Errorf("reconnect defaults = attempts %d jitter %v, want 0/true", cfg.MaxAttempts, cfg.Jitter)
+	}
 }

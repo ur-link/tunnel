@@ -22,11 +22,16 @@ acme_email: [email protected]   # tls_mode=acme
 # tls_key_file:  /etc/tunnel/certs/key.pem        # tls_mode=file
 trust_forwarded: false          # set true when behind Traefik/nginx (tls_mode=off)
 
-# --- Auth (per-client tokens) ---
-# Inline: "token" or "token:reserved1|reserved2", comma-separated.
+# --- Auth (per-client tokens / namespaces) ---
+# Entry grammar: token[@namespace][:reserved1|reserved2]  (comma/newline separated)
+#   sometoken@meabed       -> services become <slug>-meabed.<domain>; meabed.<domain> is the hub
+#   plain:myapp|api        -> legacy flat names (myapp.<domain>), no namespace
 # Prefer tokens_file (or TUNNEL_TOKENS_FILE) for secrets in production.
-tokens: "sometoken:myapp|api, anothertoken"
+# The tokens file is HOT-RELOADED on change (add/revoke without dropping connections).
+tokens: "sometoken@meabed, anothertoken@acme:web"
 # tokens_file: /etc/tunnel/tokens
+# state_file: /data/state.json     # persist the service registry across restarts
+# reload_interval: 5s              # how often to check tokens_file for changes (0 = off)
 
 # --- Tuning ---
 random_name_len: 8

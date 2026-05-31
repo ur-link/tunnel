@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net"
 	"net/http"
 	"strings"
@@ -43,8 +44,12 @@ func New(cfg *config.Client, log *slog.Logger) *Client {
 // Run connects and serves until ctx is cancelled, reconnecting with exponential
 // backoff. Unrecoverable errors (bad auth) stop the loop.
 func (c *Client) Run(ctx context.Context) error {
-	const baseBackoff = 500 * time.Millisecond
-	backoff := baseBackoff
+	base := c.cfg.InitialBackoff
+	if base <= 0 {
+		base = time.Second
+	}
+	backoff := base
+	attempt := 0
 
 	for {
 		established, err := c.connectAndServe(ctx)
@@ -56,17 +61,26 @@ func (c *Client) Run(ctx context.Context) error {
 			return fatal
 		}
 		// A session that actually came up and later dropped is not a flapping
-		// endpoint — reset the backoff so a healthy long-lived tunnel reconnects
-		// promptly instead of inheriting a grown delay from earlier failures.
+		// endpoint — reset backoff + attempt count so a healthy long-lived tunnel
+		// reconnects promptly instead of inheriting a grown delay.
 		if established {
-			backoff = baseBackoff
+			backoff, attempt = base, 0
 		}
-		c.log.Warn("disconnected; reconnecting", "err", err, "in", backoff.String())
+		attempt++
+		if c.cfg.MaxAttempts > 0 && attempt >= c.cfg.MaxAttempts {
+			return fmt.Errorf("giving up after %d reconnect attempts: %w", attempt, err)
+		}
+
+		wait := backoff
+		if c.cfg.Jitter {
+			wait = wait/2 + time.Duration(rand.Int63n(int64(wait/2)+1))
+		}
+		c.log.Warn("disconnected; reconnecting", "err", err, "in", wait.String(), "attempt", attempt)
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(backoff):
+		case <-time.After(wait):
 		}
 		if backoff *= 2; backoff > c.cfg.MaxBackoff {
 			backoff = c.cfg.MaxBackoff
