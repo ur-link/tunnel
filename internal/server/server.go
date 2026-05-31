@@ -1,0 +1,158 @@
+// Package server implements the tunnel edge: a public reverse proxy plus a
+// WebSocket control plane that multiplexes inbound requests to connected
+// clients over yamux.
+package server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/meabed/tunnel/internal/config"
+)
+
+// Server ties together the control plane, the public edge, and metrics.
+type Server struct {
+	cfg     *config.Server
+	log     *slog.Logger
+	reg     *registry
+	tokens  *TokenStore
+	metrics *metrics
+}
+
+// New constructs a Server from resolved config.
+func New(cfg *config.Server, log *slog.Logger) *Server {
+	return &Server{
+		cfg:     cfg,
+		log:     log,
+		reg:     newRegistry(),
+		tokens:  NewTokenStore(cfg.TokensRaw),
+		metrics: newMetrics(),
+	}
+}
+
+// Run starts all listeners and blocks until ctx is cancelled or a listener
+// fails. The control, edge, and metrics planes run on independent listeners so
+// they can be routed separately (e.g. by Traefik).
+func (s *Server) Run(ctx context.Context) error {
+	if s.tokens.IsEphemeral() {
+		s.log.Warn("no auth tokens configured — generated an ephemeral token",
+			"token", s.tokens.EphemeralTok,
+			"hint", "set TUNNEL_TOKENS / --tokens / tokens_file for stable auth")
+	}
+
+	errc := make(chan error, 4)
+
+	control := s.newHTTPServer(s.cfg.ControlAddr, s.controlMux(), ctx)
+	edge := s.newHTTPServer(s.cfg.HTTPAddr, s.edgeHandler(), ctx)
+	metricsSrv := s.newHTTPServer(s.cfg.MetricsAddr, s.metricsMux(), ctx)
+
+	go serve(control, "control", s.cfg.ControlAddr, errc, s.log)
+	go serve(edge, "edge-http", s.cfg.HTTPAddr, errc, s.log)
+	go serve(metricsSrv, "metrics", s.cfg.MetricsAddr, errc, s.log)
+
+	// Standalone HTTPS edge with on-demand ACME certs.
+	if s.cfg.TLSMode == "acme" {
+		httpsSrv := s.newHTTPServer(s.cfg.HTTPSAddr, s.edgeHandler(), ctx)
+		httpsSrv.TLSConfig = s.acmeTLSConfig()
+		go serveTLS(httpsSrv, "edge-https", s.cfg.HTTPSAddr, errc, s.log)
+	}
+
+	s.log.Info("tunnel server started",
+		"domain", s.cfg.Domain,
+		"control", s.cfg.ControlAddr,
+		"http", s.cfg.HTTPAddr,
+		"https", s.cfg.HTTPSAddr,
+		"metrics", s.cfg.MetricsAddr,
+		"tls_mode", s.cfg.TLSMode,
+	)
+
+	select {
+	case <-ctx.Done():
+		s.shutdown(control, edge, metricsSrv)
+		return ctx.Err()
+	case err := <-errc:
+		s.shutdown(control, edge, metricsSrv)
+		return err
+	}
+}
+
+// newHTTPServer builds an http.Server whose connections inherit ctx, with a
+// ReadHeaderTimeout and IdleTimeout but deliberately NO WriteTimeout (a hard
+// write deadline would sever long-lived SSE/WebSocket streams).
+func (s *Server) newHTTPServer(addr string, h http.Handler, ctx context.Context) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: s.cfg.ReadHeaderTimeout,
+		IdleTimeout:       s.cfg.IdleTimeout,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
+}
+
+func (s *Server) shutdown(srvs ...*http.Server) {
+	sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, srv := range srvs {
+		if srv != nil {
+			_ = srv.Shutdown(sctx)
+		}
+	}
+}
+
+// hostToName strips the base domain and returns the leading subdomain label,
+// or "" if host is not under the configured domain.
+func (s *Server) hostToName(host string) string {
+	host = strings.ToLower(host)
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i] // strip port
+	}
+	suffix := "." + strings.ToLower(s.cfg.Domain)
+	if !strings.HasSuffix(host, suffix) {
+		return ""
+	}
+	name := strings.TrimSuffix(host, suffix)
+	// Only a single-label subdomain is a tunnel (no nested dots).
+	if name == "" || strings.Contains(name, ".") {
+		return ""
+	}
+	return name
+}
+
+// reserveName picks and atomically reserves a hostname for a client. It honors
+// a permitted requested name, otherwise assigns a random slug.
+func (s *Server) reserveName(requested string, info *TokenInfo) (host string, ok bool) {
+	if name := sanitizeLabel(requested); name != "" && s.tokens.NameAllowed(info, name) {
+		h := name + "." + s.cfg.Domain
+		if s.reg.reserve(h) {
+			return h, true
+		}
+		// Requested name is taken; fall through to a random assignment.
+	}
+	for i := 0; i < 16; i++ {
+		h := randomName(s.cfg.RandomNameLen) + "." + s.cfg.Domain
+		if s.reg.reserve(h) {
+			return h, true
+		}
+	}
+	return "", false
+}
+
+func serve(srv *http.Server, name, addr string, errc chan<- error, log *slog.Logger) {
+	log.Debug("listener starting", "name", name, "addr", addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		errc <- fmt.Errorf("%s listener (%s): %w", name, addr, err)
+	}
+}
+
+func serveTLS(srv *http.Server, name, addr string, errc chan<- error, log *slog.Logger) {
+	log.Debug("tls listener starting", "name", name, "addr", addr)
+	if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		errc <- fmt.Errorf("%s listener (%s): %w", name, addr, err)
+	}
+}

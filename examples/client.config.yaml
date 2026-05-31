@@ -1,0 +1,16 @@
+# Example client config. With this at ~/.tunnel/config.yaml you can simply run:
+#   tunnel http 3000
+# Flags and TUNNEL_* env vars override these (flags > env > file > defaults).
+
+server: wss://connect.tunnel.example.com
+token: sometoken                # or set token_file / TUNNEL_TOKEN_FILE
+# token_file: ~/.tunnel/token
+
+# name: myapp                   # requested subdomain; omit for a random slug
+# target: 3000                  # usually passed positionally: `tunnel http 3000`
+# host_header: localhost:3000   # Host presented to the local app (default: public host)
+# insecure: false               # skip server TLS verification (dev only)
+max_backoff: 30s
+
+log_level: info
+log_format: auto
