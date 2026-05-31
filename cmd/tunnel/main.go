@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -41,6 +42,8 @@ func main() {
 		err = runClient(args)
 	case "auto":
 		err = runAuto(args)
+	case "healthcheck":
+		err = runHealthcheck(args)
 	case "version", "--version", "-v":
 		fmt.Printf("tunnel %s\n", version)
 	case "help", "--help", "-h":
@@ -151,6 +154,44 @@ func parseRuntimes(s string) map[string]bool {
 	return m
 }
 
+// runHealthcheck probes a /healthz endpoint and exits non-zero if unhealthy.
+// Used as the container HEALTHCHECK (distroless-friendly — no curl needed):
+//
+//	tunnel healthcheck [url]   (default $TUNNEL_HEALTHCHECK_URL or control :7000)
+func runHealthcheck(args []string) error {
+	url := firstArg(args)
+	if url == "" {
+		url = os.Getenv("TUNNEL_HEALTHCHECK_URL")
+	}
+	if url == "" {
+		url = "http://127.0.0.1:7000/healthz"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unhealthy: %s returned %d", url, resp.StatusCode)
+	}
+	return nil
+}
+
+func firstArg(args []string) string {
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			return a
+		}
+	}
+	return ""
+}
+
 // signalContext returns a context cancelled on SIGINT/SIGTERM.
 func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -169,6 +210,7 @@ Usage:
   tunnel server [flags]          Run the public edge server
   tunnel http <target> [flags]   Forward a single local service through a tunnel
   tunnel auto [path] [flags]     Discover & expose all dev servers under a path
+  tunnel healthcheck [url]       Probe /healthz (container HEALTHCHECK); exit 0 if healthy
   tunnel version                 Print version
   tunnel help                    Show this help
 

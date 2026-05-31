@@ -52,6 +52,28 @@ docker run --rm urlink/tunnel:latest version
 
 The npm package ships a tiny launcher that resolves a prebuilt binary for your platform (or downloads it from the GitHub release on first run), so `npx` always works on darwin/linux/windows × amd64/arm64.
 
+## Self-host in 60 seconds
+
+Point `*.tunnel.example.com` **and** `connect.tunnel.example.com` at your host, open ports 80/443/7000, then:
+
+```bash
+docker run -d --name tunnel --restart unless-stopped \
+  -p 80:80 -p 443:443 -p 7000:7000 -v tunnel-data:/data \
+  -e TUNNEL_DOMAIN=tunnel.example.com -e [email protected] \
+  ghcr.io/ur-link/tunnel:latest
+docker logs tunnel | grep ephemeral   # copy the auto-generated admin token
+```
+
+The server gets its own Let's Encrypt cert, persists it in the `tunnel-data` volume, and ships a built-in container **healthcheck** + auto-restart. From any machine:
+
+```bash
+npx @urlink/tunnel http 3000 \
+  --server wss://connect.tunnel.example.com --token <token> --name myapp
+#   ➜  https://myapp.tunnel.example.com
+```
+
+Compose: [`deploy/docker-compose.quickstart.yml`](deploy/docker-compose.quickstart.yml) · behind Traefik / standalone / wildcard / path-routing variants under [`deploy/`](deploy/) · bare-metal [`deploy/tunnel.service`](deploy/tunnel.service) (systemd). Set stable tokens later via `TUNNEL_TOKENS_FILE` ([docs/multi-tenant.md](docs/multi-tenant.md)).
+
 ## Quick start (local)
 
 ```bash

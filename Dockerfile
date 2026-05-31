@@ -20,5 +20,8 @@ COPY --from=build /out/tunnel /usr/bin/tunnel
 ENV TUNNEL_TLS_CACHE_DIR=/data/certs
 # Edge HTTP / HTTPS / control / metrics.
 EXPOSE 80 443 7000 9090
+# Distroless-friendly healthcheck (no shell/curl needed): probe the control plane.
+HEALTHCHECK --interval=30s --timeout=4s --start-period=10s --retries=3 \
+  CMD ["/usr/bin/tunnel", "healthcheck"]
 ENTRYPOINT ["/usr/bin/tunnel"]
 CMD ["server"]

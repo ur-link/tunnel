@@ -1,0 +1,29 @@
+# systemd unit for a standalone tunnel server (binary at /usr/local/bin/tunnel).
+#   sudo cp deploy/tunnel.service /etc/systemd/system/
+#   sudo mkdir -p /etc/tunnel /var/lib/tunnel && sudo $EDITOR /etc/tunnel/config.yaml
+#   sudo systemctl enable --now tunnel
+[Unit]
+Description=tunnel server (self-hosted ngrok)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Reads /etc/tunnel/config.yaml automatically (config search path).
+ExecStart=/usr/local/bin/tunnel server
+Restart=always
+RestartSec=2
+# Lets the unprivileged service bind :80/:443 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+DynamicUser=yes
+StateDirectory=tunnel
+Environment=TUNNEL_TLS_CACHE_DIR=/var/lib/tunnel/certs
+# Plenty of file descriptors for many concurrent tunnels.
+LimitNOFILE=65536
+# Hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

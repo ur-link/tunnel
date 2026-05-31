@@ -1,0 +1,38 @@
+# Quickstart — the fastest way to self-host. One container, automatic TLS.
+#
+#   1. Point  *.tunnel.example.com  and  connect.tunnel.example.com  at this host.
+#   2. Open ports 80, 443, 7000.
+#   3. Set DOMAIN + ACME_EMAIL below (or via a .env file) and:
+#        docker compose -f deploy/docker-compose.quickstart.yml up -d
+#   4. Grab the auto-generated admin token from the logs:
+#        docker compose -f deploy/docker-compose.quickstart.yml logs | grep ephemeral
+#      (set TUNNEL_TOKENS_FILE later for stable tokens — see docs/multi-tenant.md)
+#
+# Then, from any machine:
+#   npx @urlink/tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok> --name myapp
+services:
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: ${DOMAIN:-tunnel.example.com}
+      TUNNEL_TLS_MODE: acme
+      TUNNEL_TLS_ACME_EMAIL: ${ACME_EMAIL:-you@example.com}
+      TUNNEL_TLS_CACHE_DIR: /data/certs
+      TUNNEL_LOG_FORMAT: json
+    ports:
+      - "80:80"
+      - "443:443"
+      - "7000:7000"
+      - "127.0.0.1:9090:9090" # metrics: localhost only
+    volumes:
+      - tunnel-data:/data # ACME certs + state survive restarts
+    # The image ships a HEALTHCHECK; restart:unless-stopped + the named volume
+    # make this durable across reboots and re-deploys.
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 } # plenty of headroom for many tunnels
+
+volumes:
+  tunnel-data:
