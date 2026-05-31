@@ -80,7 +80,12 @@ pipeline; assets embedded via `embed.FS` so the binary stays single-file.
 2. **Admin + user APIs** ✅ *done*: writable JSON identity store + CRUD/rotate;
    admin API at `admin.<domain>` (admin-role Bearer); per-namespace hub API at
    `<namespace>.<domain>` (own token or admin). Edge routes admin/hub/service by host.
-3. **UIs** (templ + HTMX + templui): admin console + user status page.
+3. **UIs** ✅ *done*: templ + vendored HTMX + hand-crafted OKLCH styles (modern-minimal,
+   per the hallmark/frontend-design discipline), embedded in the binary. Admin console
+   (`admin.<domain>`: users table, create/rotate/delete, live service list) + per-namespace
+   status page (`<namespace>.<domain>`), cookie-authenticated, with live HTMX refresh.
+   Generated `*_templ.go` is committed (CI builds without the templ CLI; `make generate`
+   to regenerate). templui/Tailwind can layer on later.
 4. **Discovery client** ✅ *done*: `tunnel auto [path]` ports portless scanning
    (lsof/netstat → runtime classify → project-root slug), `--path` containment
    (symlink-resolved), expose-all, rescan loop; one reused client per service.

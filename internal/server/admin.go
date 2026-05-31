@@ -3,7 +3,12 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/ur-link/tunnel/internal/web"
 )
+
+// staticHandler serves embedded UI assets (/_static/...).
+func staticHandler(w http.ResponseWriter, r *http.Request) { web.Static(w, r) }
 
 // writeJSON writes v as an indented JSON response with the given status.
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -14,18 +19,28 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = enc.Encode(v)
 }
 
-// adminMux serves the admin API (identity CRUD), gated to admin-role tokens.
-// Mounted on the edge at host admin.<domain>.
+// adminMux serves host admin.<domain>: the web console (cookie auth) plus a
+// JSON API under /api (admin-role Bearer or admin cookie).
 func (s *Server) adminMux() http.Handler {
+	api := http.NewServeMux()
+	api.HandleFunc("GET /api/users", s.adminListUsers)
+	api.HandleFunc("POST /api/users", s.adminCreateUser)
+	api.HandleFunc("PATCH /api/users/{token}", s.adminUpdateUser)
+	api.HandleFunc("DELETE /api/users/{token}", s.adminDeleteUser)
+	api.HandleFunc("POST /api/users/{token}/rotate", s.adminRotateUser)
+	api.HandleFunc("GET /api/services", s.adminListServices)
+
 	m := http.NewServeMux()
-	m.HandleFunc("GET /api/users", s.adminListUsers)
-	m.HandleFunc("POST /api/users", s.adminCreateUser)
-	m.HandleFunc("PATCH /api/users/{token}", s.adminUpdateUser)
-	m.HandleFunc("DELETE /api/users/{token}", s.adminDeleteUser)
-	m.HandleFunc("POST /api/users/{token}/rotate", s.adminRotateUser)
-	m.HandleFunc("GET /api/services", s.adminListServices)
-	m.HandleFunc("/", s.adminIndex)
-	return s.requireRole(RoleAdmin, m)
+	m.Handle("/api/", s.requireRole(RoleAdmin, api))
+	m.HandleFunc("/_static/", staticHandler)
+	m.HandleFunc("POST /login", s.adminLogin)
+	m.HandleFunc("POST /logout", s.adminLogout)
+	m.HandleFunc("POST /users", s.adminWebCreate)
+	m.HandleFunc("POST /users/rotate", s.adminWebRotate)
+	m.HandleFunc("POST /users/delete", s.adminWebDelete)
+	m.HandleFunc("GET /partials/services", s.adminPartialServices)
+	m.HandleFunc("GET /{$}", s.adminHome)
+	return m
 }
 
 // requireRole wraps a handler with Bearer-token auth requiring the given role.
@@ -94,33 +109,19 @@ func (s *Server) adminListServices(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"services": s.store.list("")})
 }
 
-// adminIndex is a placeholder until the templ admin console (Phase 3) lands.
-func (s *Server) adminIndex(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"service": "tunnel admin", "domain": s.cfg.Domain,
-		"hint": "API: /api/users, /api/services (admin Bearer token). Web console: coming soon.",
-	})
-}
-
-// handleHub serves a user's namespace hub at <namespace>.<domain>: the status
-// API now, the templ status page later. Auth: the namespace's own token (or an
-// admin token), via Bearer or ?token=.
+// handleHub serves a user's namespace hub at <namespace>.<domain>. The JSON API
+// (/api/services, Bearer or hub cookie) is for CLI/automation; everything else
+// is the browser status page (cookie-authenticated) in handleHubWeb.
 func (s *Server) handleHub(w http.ResponseWriter, r *http.Request, namespace string) {
-	info, ok := s.tokens.Authenticate(bearerToken(r))
-	if !ok || (info.Namespace != namespace && info.Role != RoleAdmin) {
-		w.Header().Set("WWW-Authenticate", "Bearer")
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized for namespace " + namespace})
+	if r.URL.Path == "/api/services" {
+		info, ok := s.tokens.Authenticate(tokenFromRequest(r, hubCookie))
+		if !ok || (info.Namespace != namespace && info.Role != RoleAdmin) {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized for namespace " + namespace})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"namespace": namespace, "services": s.store.list(namespace)})
 		return
 	}
-	switch r.URL.Path {
-	case "/api/services":
-		writeJSON(w, http.StatusOK, map[string]any{
-			"namespace": namespace, "services": s.store.list(namespace),
-		})
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{
-			"namespace": namespace, "services": s.store.list(namespace),
-			"hint": "status page UI coming soon",
-		})
-	}
+	s.handleHubWeb(w, r, namespace)
 }

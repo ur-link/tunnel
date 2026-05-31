@@ -3,6 +3,7 @@ module github.com/ur-link/tunnel
 go 1.26.3
 
 require (
+	github.com/a-h/templ v0.3.1020
 	github.com/coder/websocket v1.8.14
 	github.com/hashicorp/yamux v0.1.2
 	github.com/knadh/koanf/parsers/json v1.0.0

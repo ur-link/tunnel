@@ -1,4 +1,8 @@
-.PHONY: build install test test-race lint fmt vet run-server run-client docker snapshot clean
+.PHONY: build install test test-race lint fmt vet run-server run-client docker snapshot clean generate
+
+generate: ## Regenerate templ components (run after editing internal/web/*.templ)
+	go run github.com/a-h/templ/cmd/templ@latest generate
+
 
 BIN     ?= tunnel
 VERSION ?= dev

@@ -1,0 +1,198 @@
+package web
+
+// View models (plain data; the server package maps its types onto these so web
+// never imports server — no import cycle).
+
+type UserRow struct {
+	Token     string
+	Namespace string
+	Label     string
+	Role      string
+}
+
+type ServiceRow struct {
+	Host          string
+	Namespace     string
+	Online        bool
+	Requests      int64
+	ActiveStreams int64
+	LastSeen      string
+}
+
+type AdminView struct {
+	Domain   string
+	Users    []UserRow
+	Services []ServiceRow
+}
+
+type HubView struct {
+	Namespace string
+	Domain    string
+	Services  []ServiceRow
+}
+
+templ layout(title, who string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } · tunnel</title>
+			<style>
+				@templ.Raw(appCSS)
+			</style>
+			<script src="/_static/htmx.min.js" defer></script>
+		</head>
+		<body>
+			<div class="topbar">
+				<div class="brand"><span class="dot"></span> tunnel <span class="sub">{ title }</span></div>
+				if who != "" {
+					<div class="who">{ who }</div>
+				}
+			</div>
+			<div class="wrap">
+				{ children... }
+			</div>
+		</body>
+	</html>
+}
+
+templ statusBadge(online bool) {
+	if online {
+		<span class="badge on"><span class="pip"></span> online</span>
+	} else {
+		<span class="badge off"><span class="pip"></span> offline</span>
+	}
+}
+
+templ servicesTable(services []ServiceRow, showNS bool) {
+	if len(services) == 0 {
+		<div class="empty">No services yet. Start a client and they'll appear here.</div>
+	} else {
+		<table>
+			<thead>
+				<tr>
+					if showNS {
+						<th>Namespace</th>
+					}
+					<th>Service</th>
+					<th>Status</th>
+					<th class="right">Requests</th>
+					<th>Last seen</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, s := range services {
+					<tr>
+						if showNS {
+							<td data-label="Namespace" class="mono">{ orDash(s.Namespace) }</td>
+						}
+						<td data-label="Service" class="host"><a href={ templ.URL("https://" + s.Host) } target="_blank" rel="noopener">{ s.Host }</a></td>
+						<td data-label="Status">@statusBadge(s.Online)</td>
+						<td data-label="Requests" class="right mono">{ itoa(s.Requests) }</td>
+						<td data-label="Last seen" class="muted">{ s.LastSeen }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ usersTable(users []UserRow) {
+	if len(users) == 0 {
+		<div class="empty">No users yet — create one below.</div>
+	} else {
+		<table>
+			<thead>
+				<tr><th>Namespace</th><th>Label</th><th>Role</th><th>Token</th><th class="right">Actions</th></tr>
+			</thead>
+			<tbody>
+				for _, u := range users {
+					<tr>
+						<td data-label="Namespace" class="mono">{ orDash(u.Namespace) }</td>
+						<td data-label="Label">{ orDash(u.Label) }</td>
+						<td data-label="Role"><span class="badge role">{ u.Role }</span></td>
+						<td data-label="Token"><span class="tokchip">{ u.Token }</span></td>
+						<td data-label="Actions" class="right">
+							<form method="post" action="/users/rotate" style="display:inline">
+								<input type="hidden" name="token" value={ u.Token }/>
+								<button class="btn ghost sm" type="submit">Rotate</button>
+							</form>
+							<form method="post" action="/users/delete" style="display:inline">
+								<input type="hidden" name="token" value={ u.Token }/>
+								<button class="btn danger sm" type="submit">Delete</button>
+							</form>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ footer(domain string) {
+	<div class="foot"><span class="mono">{ domain }</span><span class="muted">self-hosted tunnel</span></div>
+}
+
+templ adminConsole(v AdminView) {
+	@layout("admin", v.Domain) {
+		<h1>Admin console</h1>
+		<p class="lede">Manage users, namespaces and tokens for <span class="mono">{ v.Domain }</span>.</p>
+		<h2>Users</h2>
+		<div class="card">
+			@usersTable(v.Users)
+		</div>
+		<h2>New user</h2>
+		<div class="card">
+			<form class="row" method="post" action="/users">
+				<div class="field"><label>Namespace</label><input class="input" name="namespace" placeholder="meabed" required/></div>
+				<div class="field"><label>Label</label><input class="input" name="label" placeholder="Mohamed"/></div>
+				<div class="field">
+					<label>Role</label>
+					<select class="input" name="role">
+						<option value="user">user</option>
+						<option value="admin">admin</option>
+					</select>
+				</div>
+				<button class="btn" type="submit">Create user</button>
+			</form>
+		</div>
+		<h2>Services</h2>
+		<div class="card" hx-get="/partials/services" hx-trigger="every 5s" hx-swap="innerHTML">
+			@servicesTable(v.Services, true)
+		</div>
+		@footer(v.Domain)
+	}
+}
+
+templ hubPage(v HubView) {
+	@layout(v.Namespace, v.Namespace + "." + v.Domain) {
+		<h1>{ v.Namespace }</h1>
+		<p class="lede">Services published on <span class="mono">{ v.Namespace }.{ v.Domain }</span>.</p>
+		<div class="card" hx-get="/partials/services" hx-trigger="every 5s" hx-swap="innerHTML">
+			@servicesTable(v.Services, false)
+		</div>
+		@footer(v.Domain)
+	}
+}
+
+templ loginPage(title, action, errMsg string) {
+	@layout(title, "") {
+		<div class="login">
+			<div class="card">
+				<h1>{ title }</h1>
+				<p class="muted" style="margin-top:0">Sign in with your access token.</p>
+				if errMsg != "" {
+					<p class="err">{ errMsg }</p>
+				}
+				<form method="post" action={ templ.SafeURL(action) }>
+					<div class="field">
+						<label>Access token</label>
+						<input class="input" type="password" name="token" placeholder="paste your token" autofocus required/>
+					</div>
+					<button class="btn" type="submit">Sign in</button>
+				</form>
+			</div>
+		</div>
+	}
+}
