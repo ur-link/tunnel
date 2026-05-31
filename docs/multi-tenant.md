@@ -63,6 +63,9 @@ walk to project root → derive slug). Default mode when run with no explicit ta
 (Tailwind component library). Server-rendered; `templ generate` + Tailwind build added to the
 pipeline; assets embedded via `embed.FS` so the binary stays single-file.
 
+**Design quality**: build the UIs through the `hallmark` (anti-AI-slop design) and
+`frontend-design` skills so they look intentional and polished, not generic.
+
 - **Admin console**: users table, create/edit user (namespace, label, role), rotate/revoke token.
 - **User status page** (`<namespace>.ur.link`): the namespace's services, online/offline, links,
   request/traffic stats, copy-url.
@@ -76,7 +79,9 @@ pipeline; assets embedded via `embed.FS` so the binary stays single-file.
    non-namespaced tokens.*
 2. **Admin + user APIs**: admin CRUD over the identity store; per-namespace status API.
 3. **UIs** (templ + HTMX + templui): admin console + user status page.
-4. **Discovery client**: port portless scanning, `--path` containment, expose-all/one, auto-name.
+4. **Discovery client** ✅ *done*: `tunnel auto [path]` ports portless scanning
+   (lsof/netstat → runtime classify → project-root slug), `--path` containment
+   (symlink-resolved), expose-all, rescan loop; one reused client per service.
 5. **Polish**: name-match heuristics; (optional) per-user DNS-01 for nested subdomains.
 
 ## TLS

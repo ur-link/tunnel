@@ -65,9 +65,25 @@ func RegisterClientFlags(f *pflag.FlagSet) {
 	f.String("log-format", "auto", "log format: auto|text|json")
 }
 
-// LoadClient resolves the client configuration. target is the positional
-// argument from `tunnel http <target>`; it wins over the config layers when set.
+// LoadClient resolves the client configuration for `tunnel http <target>`.
 func LoadClient(f *pflag.FlagSet, target string) (*Client, error) {
+	c, err := loadClient(f, target)
+	if err != nil {
+		return nil, err
+	}
+	if c.Target == "" {
+		return nil, fmt.Errorf("target is required (e.g. `tunnel http 3000`)")
+	}
+	return c, nil
+}
+
+// LoadClientBase resolves the client configuration without requiring a target —
+// used by `tunnel auto`, which derives targets from discovery.
+func LoadClientBase(f *pflag.FlagSet) (*Client, error) {
+	return loadClient(f, "")
+}
+
+func loadClient(f *pflag.FlagSet, target string) (*Client, error) {
 	k, err := load(clientDefaults(), f)
 	if err != nil {
 		return nil, err
@@ -99,20 +115,10 @@ func LoadClient(f *pflag.FlagSet, target string) (*Client, error) {
 		LogFormat:      k.String("log_format"),
 	}
 
-	if err := c.validate(); err != nil {
-		return nil, err
+	if c.Server == "" {
+		return nil, fmt.Errorf("server is required (set --server, TUNNEL_SERVER, or server: in the config file)")
 	}
 	return c, nil
-}
-
-func (c *Client) validate() error {
-	if c.Server == "" {
-		return fmt.Errorf("server is required (set --server, TUNNEL_SERVER, or server: in the config file)")
-	}
-	if c.Target == "" {
-		return fmt.Errorf("target is required (e.g. `tunnel http 3000`)")
-	}
-	return nil
 }
 
 // normalizeTarget accepts "3000", ":3000", "localhost:3000", or a full

@@ -59,6 +59,19 @@ curl -H 'Host: myapp.lvh.me' http://127.0.0.1:8080/
 
 (`lvh.me` and `*.lvh.me` resolve to 127.0.0.1, handy for local testing.)
 
+## Auto-discovery (`tunnel auto`)
+
+Expose **every** dev server under a folder in one command — no per-service config. `tunnel auto` scans local listening ports, classifies the runtime, derives a slug from each project folder, and opens a tunnel per service. It's **path-contained**: only projects under the given path are touched, and it rescans to pick up servers as they start/stop.
+
+```bash
+# expose everything running under ~/code (token's namespace -> <slug>-<namespace>.<domain>)
+npx @urlink/tunnel auto ~/code --server wss://connect.tunnel.example.com --token <tok>
+#   ➜  https://web-meabed.ur.link   → 127.0.0.1:3000
+#   ➜  https://api-meabed.ur.link   → 127.0.0.1:8080
+```
+
+Flags: `--path` (default cwd), `--all` (include non-web runtimes), `--runtimes node,bun`, `--interval 5s`. Discovery is ported from `portless-tailscale-proxy` (lsof/netstat → runtime classify → project-root slug).
+
 ## Configuration
 
 Three interchangeable layers, later wins:

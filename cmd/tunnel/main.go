@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	flag "github.com/spf13/pflag"
 
@@ -37,6 +39,8 @@ func main() {
 		err = runServer(args)
 	case "http":
 		err = runClient(args)
+	case "auto":
+		err = runAuto(args)
 	case "version", "--version", "-v":
 		fmt.Printf("tunnel %s\n", version)
 	case "help", "--help", "-h":
@@ -94,6 +98,59 @@ func runClient(args []string) error {
 	return nil
 }
 
+func runAuto(args []string) error {
+	fs := flag.NewFlagSet("auto", flag.ContinueOnError)
+	config.RegisterClientFlags(fs)
+	fs.String("path", "", "containment path: only expose projects under it (default: cwd)")
+	fs.Bool("all", false, "include non-web runtimes (default: known web runtimes only)")
+	fs.String("runtimes", "", "comma-separated runtimes to include, e.g. node,bun (default: all known)")
+	fs.String("interval", "5s", "how often to rescan for new/removed dev servers")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	base, err := config.LoadClientBase(fs)
+	if err != nil {
+		return err
+	}
+
+	path := fs.Arg(0)
+	if path == "" {
+		path, _ = fs.GetString("path")
+	}
+	if path == "" {
+		path, _ = os.Getwd()
+	}
+	all, _ := fs.GetBool("all")
+	rtStr, _ := fs.GetString("runtimes")
+	intervalStr, _ := fs.GetString("interval")
+	interval, _ := time.ParseDuration(intervalStr)
+
+	opts := client.AutoOptions{All: all, Runtimes: parseRuntimes(rtStr), Path: path, Interval: interval}
+	log := logging.New(base.LogLevel, base.LogFormat)
+	client.Version = version
+	ctx, stop := signalContext()
+	defer stop()
+	if err := client.RunAuto(ctx, base, opts, log); err != nil && err != context.Canceled {
+		return err
+	}
+	return nil
+}
+
+// parseRuntimes turns "node,bun" into a set; "" yields nil (all known).
+func parseRuntimes(s string) map[string]bool {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	m := map[string]bool{}
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			m[p] = true
+		}
+	}
+	return m
+}
+
 // signalContext returns a context cancelled on SIGINT/SIGTERM.
 func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -110,13 +167,15 @@ func usage() {
 
 Usage:
   tunnel server [flags]          Run the public edge server
-  tunnel http <target> [flags]   Forward a local service through a tunnel
+  tunnel http <target> [flags]   Forward a single local service through a tunnel
+  tunnel auto [path] [flags]     Discover & expose all dev servers under a path
   tunnel version                 Print version
   tunnel help                    Show this help
 
 Examples:
   tunnel server --domain tunnel.example.com --acme-email you@example.com
   tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok> --name myapp
+  tunnel auto ~/code --server wss://connect.tunnel.example.com --token <tok>
 
 All flags are also settable via TUNNEL_* env vars and a config file
 (--config tunnel.yaml|json|toml). Run a subcommand with --help for its flags.
