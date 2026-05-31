@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+// Publish each per-platform binary package under npm/dist/. These are generated
+// by npm/build-platform-packages.mjs from the goreleaser archives.
+// Usage: node scripts/publish-platform-packages.mjs <version>
+import { readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const version = process.argv[2] ?? "";
+const distRoot = join("npm", "dist", "@ur-link");
+if (!existsSync(distRoot)) {
+  console.error(`missing ${distRoot} — run npm/build-platform-packages.mjs first`);
+  process.exit(1);
+}
+
+// Provenance requires npm trusted-publishing setup; opt in explicitly once the
+// package + trusted publisher exist (TUNNEL_PROVENANCE=1), off by default.
+const provenance = process.env.TUNNEL_PROVENANCE === "1";
+
+const pkgs = readdirSync(distRoot, { withFileTypes: true })
+  .filter((d) => d.isDirectory())
+  .map((d) => d.name);
+
+if (pkgs.length === 0) {
+  console.error(`no platform packages found in ${distRoot}`);
+  process.exit(1);
+}
+
+for (const name of pkgs) {
+  const dir = join(distRoot, name);
+  const args = ["publish", "--access", "public"];
+  if (provenance) args.push("--provenance");
+  console.log(`\n→ (@ur-link/${name}) npm ${args.join(" ")}  ${version}`);
+  const res = spawnSync("npm", args, { stdio: "inherit", cwd: dir });
+  if (res.status !== 0) {
+    // Treat "already published" as non-fatal so re-runs are idempotent.
+    console.warn(`! npm publish for @ur-link/${name} exited ${res.status} (continuing)`);
+  }
+}
+console.log(`\npublished ${pkgs.length} platform package(s)`);

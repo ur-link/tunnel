@@ -19,6 +19,28 @@ Browser ──HTTPS──▶  tunnel server  ──yamux stream over WebSocket�
 - **Cloud-native config**: defaults → file (JSON/TOML/YAML) → env (`TUNNEL_*`, `*_FILE` secrets) → flags. Zero-config-friendly.
 - **Observability**: structured logs, Prometheus `/metrics`, JSON `/_tunnel/status`.
 
+## Install
+
+```bash
+# npx (no install) — one command, both roles
+npx @ur-link/tunnel server --domain tunnel.example.com
+npx @ur-link/tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok>
+
+# npm (global)
+npm i -g @ur-link/tunnel        # provides the `tunnel` command
+
+# Homebrew
+brew install ur-link/tap/tunnel
+
+# Go
+go install github.com/ur-link/tunnel/cmd/tunnel@latest
+
+# Docker
+docker run --rm ghcr.io/ur-link/tunnel:latest version
+```
+
+The npm package ships a tiny launcher that resolves a prebuilt binary for your platform (or downloads it from the GitHub release on first run), so `npx` always works on darwin/linux/windows × amd64/arm64.
+
 ## Quick start (local)
 
 ```bash
@@ -62,7 +84,7 @@ See [`examples/server.config.yaml`](examples/server.config.yaml) and [`examples/
 ```bash
 tunnel server --domain tunnel.example.com --tls-mode acme [email protected]
 ```
-Needs `*.tunnel.example.com` (and `connect.tunnel.example.com`) pointed at the host, and ports 443/7000 reachable. Certs are issued per-host on first request (TLS-ALPN-01) — no wildcard cert required.
+Needs `*.tunnel.example.com` (and `connect.tunnel.example.com`) pointed at the host, and ports 443/7000 reachable. Certs are issued per-host on first request (TLS-ALPN-01) — no wildcard cert required. Compose version: [`deploy/docker-compose.standalone.yml`](deploy/docker-compose.standalone.yml).
 
 ### Behind Traefik (proxy does TLS)
 

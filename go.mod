@@ -1,4 +1,4 @@
-module github.com/meabed/tunnel
+module github.com/ur-link/tunnel
 
 go 1.26.3
 

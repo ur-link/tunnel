@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/meabed/tunnel/internal/config"
-	"github.com/meabed/tunnel/internal/mux"
-	"github.com/meabed/tunnel/internal/proto"
+	"github.com/ur-link/tunnel/internal/config"
+	"github.com/ur-link/tunnel/internal/mux"
+	"github.com/ur-link/tunnel/internal/proto"
 )
 
 // Version is stamped into the Register message for server-side logging.

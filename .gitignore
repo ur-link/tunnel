@@ -3,3 +3,12 @@
 dist/
 .env
 *.log
+
+# node / release tooling
+node_modules/
+npm/dist/
+bun.lock
+package-lock.json
+
+# secrets used by the compose examples
+deploy/secrets/

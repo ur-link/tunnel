@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meabed/tunnel/internal/config"
+	"github.com/ur-link/tunnel/internal/config"
 )
 
 // Server ties together the control plane, the public edge, and metrics.

@@ -15,10 +15,10 @@ import (
 
 	flag "github.com/spf13/pflag"
 
-	"github.com/meabed/tunnel/internal/client"
-	"github.com/meabed/tunnel/internal/config"
-	"github.com/meabed/tunnel/internal/logging"
-	"github.com/meabed/tunnel/internal/server"
+	"github.com/ur-link/tunnel/internal/client"
+	"github.com/ur-link/tunnel/internal/config"
+	"github.com/ur-link/tunnel/internal/logging"
+	"github.com/ur-link/tunnel/internal/server"
 )
 
 // version is overridable at build time: -ldflags "-X main.version=v1.2.3".

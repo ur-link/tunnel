@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/meabed/tunnel/internal/mux"
-	"github.com/meabed/tunnel/internal/proto"
+	"github.com/ur-link/tunnel/internal/mux"
+	"github.com/ur-link/tunnel/internal/proto"
 )
 
 // controlMux returns the handler for the control listener.

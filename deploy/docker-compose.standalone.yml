@@ -1,0 +1,44 @@
+# Example: standalone tunnel server that terminates its own TLS via Let's Encrypt
+# (on-demand per-host certs — no wildcard cert needed).
+#
+#   1. Point  *.tunnel.example.com  AND  connect.tunnel.example.com  at this host.
+#   2. Make ports 80, 443 and 7000 reachable from the internet.
+#   3. Put client tokens in ./secrets/tokens (one "token:name1|name2" per line).
+#   4. docker compose -f deploy/docker-compose.standalone.yml up -d --build
+#
+# Then from anywhere:
+#   tunnel http 3000 --server wss://connect.tunnel.example.com --token <tok> --name myapp
+services:
+  tunnel:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["server"]
+    restart: unless-stopped
+    environment:
+      TUNNEL_DOMAIN: tunnel.example.com
+      TUNNEL_TLS_MODE: acme          # server gets Let's Encrypt certs itself
+      TUNNEL_TLS_ACME_EMAIL: [email protected]
+      TUNNEL_TLS_CACHE_DIR: /certs
+      TUNNEL_HTTP_ADDR: ":80"        # ACME HTTP-01 + redirect
+      TUNNEL_HTTPS_ADDR: ":443"      # public HTTPS edge
+      TUNNEL_CONTROL_ADDR: ":7000"   # client WebSocket control plane
+      TUNNEL_METRICS_ADDR: ":9090"
+      TUNNEL_TOKENS_FILE: /run/secrets/tokens
+      TUNNEL_LOG_FORMAT: json
+    ports:
+      - "80:80"
+      - "443:443"
+      - "7000:7000"
+      - "127.0.0.1:9090:9090" # metrics: localhost only
+    volumes:
+      - tunnel-certs:/certs
+    secrets:
+      - tokens
+
+volumes:
+  tunnel-certs:
+
+secrets:
+  tokens:
+    file: ./secrets/tokens
