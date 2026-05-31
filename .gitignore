@@ -1,0 +1,5 @@
+/tunnel
+*.exe
+dist/
+.env
+*.log
