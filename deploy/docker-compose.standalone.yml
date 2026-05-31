@@ -18,7 +18,7 @@ services:
     environment:
       TUNNEL_DOMAIN: tunnel.example.com
       TUNNEL_TLS_MODE: acme          # server gets Let's Encrypt certs itself
-      TUNNEL_TLS_ACME_EMAIL: [email protected]
+      TUNNEL_TLS_ACME_EMAIL: "[email protected]"
       TUNNEL_TLS_CACHE_DIR: /certs
       TUNNEL_HTTP_ADDR: ":80"        # ACME HTTP-01 + redirect
       TUNNEL_HTTPS_ADDR: ":443"      # public HTTPS edge
