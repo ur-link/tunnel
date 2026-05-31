@@ -21,23 +21,23 @@ Product overview: [README](../README.md). TLS specifics: [TLS.md](TLS.md). Multi
 ```mermaid
 flowchart LR
   B["Browser / API client"]
-  subgraph SRV["tunnel server (public edge)"]
+  subgraph SRV["tunnel server"]
     E["Edge :80/:443<br/>routing + reverse proxy"]
     C["Control :7000<br/>WebSocket + yamux"]
-    M["Metrics :9090<br/>/metrics · /_tunnel/status"]
-    RG[("registry<br/>host → session")]
-    ID[("identity store<br/>tokens · namespaces")]
+    M["Metrics :9090<br/>/metrics and /_tunnel/status"]
+    RG[("registry<br/>host to session")]
+    ID[("identity store<br/>tokens and namespaces")]
     SS[("service store<br/>persistent")]
   end
-  subgraph CLI["tunnel client (behind NAT)"]
+  subgraph CLI["tunnel client behind NAT"]
     CL["client"]
     A1["localhost:3000"]
     A2["localhost:8080"]
   end
-  B -->|"HTTPS, host-routed"| E
+  B -->|"HTTPS host-routed"| E
   E --> RG
-  E -. "admin / hub UI" .-> ID
-  E -. "status" .-> SS
+  E -. "admin and hub UI" .-> ID
+  E -. status .-> SS
   CL -->|"outbound wss + Bearer"| C
   C --> ID
   C --> RG
@@ -57,16 +57,16 @@ sequenceDiagram
   participant S as yamux session
   participant Cl as Client
   participant App as Local app
-  B->>E: HTTPS request (Host: web-meabed.ur.link)
-  E->>Rg: lookup(host)
+  B->>E: HTTPS request, Host web-meabed.ur.link
+  E->>Rg: lookup host
   Rg-->>E: session
-  E->>S: ReverseProxy DialContext → Open() stream
+  E->>S: ReverseProxy DialContext opens stream
   S-->>Cl: accept stream
   Cl->>App: dial 127.0.0.1:3000 and relay
-  App-->>Cl: response (HTTP / WS upgrade / SSE)
+  App-->>Cl: response HTTP / WS upgrade / SSE
   Cl-->>S: bytes
   S-->>E: bytes
-  E-->>B: response (FlushInterval -1; Hijack for WS/SSE)
+  E-->>B: response, immediate flush, Hijack for WS/SSE
 ```
 
 One WebSocket per client; **yamux** multiplexes one stream per inbound request. The server opens streams, the client accepts them — no per-request connection setup.
@@ -93,7 +93,7 @@ sequenceDiagram
   else ok
     C-->>Cl: Response{ok:true, hostname, url}
     Note over Cl,C: both wrap the conn in yamux
-    C->>Rg: attach host → session
+    C->>Rg: attach host to session
     loop per inbound request, until disconnect
       C->>Cl: Open() stream
     end
@@ -114,14 +114,14 @@ sequenceDiagram
 flowchart TD
   H["request Host"] --> U{"under base domain?"}
   U -->|no| NF["404"]
-  U -->|yes| SUB["sub = host − domain"]
-  SUB --> AD{"sub == 'admin'?"}
+  U -->|yes| SUB["sub = host minus domain"]
+  SUB --> AD{"sub is admin?"}
   AD -->|yes| ADM["admin console / API"]
-  AD -->|no| NSQ{"bare label &<br/>known namespace?"}
-  NSQ -->|yes| HUB["namespace hub<br/>(status page / API)"]
+  AD -->|no| NSQ{"bare label and<br/>known namespace?"}
+  NSQ -->|yes| HUB["namespace hub<br/>status page / API"]
   NSQ -->|no| REG{"registry has host?"}
   REG -->|yes| PX["proxy to client session"]
-  REG -->|no| BG["502 — not connected"]
+  REG -->|no| BG["502 not connected"]
 ```
 
 ## HTTP surfaces
@@ -149,11 +149,11 @@ Browser auth = the token in an httpOnly cookie (`tn_admin` / `tn_hub`); CLI/auto
 
 ```mermaid
 flowchart TD
-  SC["lsof / netstat<br/>listening TCP ports"] --> CR["classify runtime<br/>(node, python, …)"]
-  CR --> PR["walk to project root<br/>(.git, package.json, go.mod…)"]
-  PR --> SL["slug = manifest name<br/>(package.json/go.mod/Cargo) else folder"]
-  SL --> GP["group by project:<br/>lowest-port proc = main (clean slug),<br/>other procs → -port, same-proc HMR collapses"]
+  SC["lsof / netstat<br/>listening TCP ports"] --> CR["classify runtime<br/>node, python, ..."]
+  CR --> PR["walk to project root<br/>.git, package.json, go.mod"]
+  PR --> SL["slug = manifest name<br/>package.json / go.mod / Cargo, else folder"]
+  SL --> GP["group by project:<br/>lowest-port proc is main (clean slug),<br/>other procs get -port, same-proc HMR collapses"]
   GP --> PF{"project root<br/>under --path?"}
-  PF -->|no| SK["skip (contained)"]
-  PF -->|yes| EX["expose &lt;slug&gt;-&lt;ns&gt;.&lt;domain&gt;<br/>(one client per service)"]
+  PF -->|no| SK["skip, contained"]
+  PF -->|yes| EX["expose slug-ns.domain<br/>one client per service"]
 ```

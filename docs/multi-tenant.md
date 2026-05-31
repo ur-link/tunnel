@@ -23,13 +23,13 @@ Status: **approved direction**, building in phases. Main domain: `ur.link`.
 
 ```mermaid
 flowchart LR
-  D["ur.link (base domain)"]
+  D["ur.link<br/>base domain"]
   D --> AD["admin.ur.link<br/>admin console + API"]
-  D --> HUB["meabed.ur.link<br/>namespace hub (auth-gated)"]
-  HUB --> S1["web-meabed.ur.link → :3000"]
-  HUB --> S2["api-meabed.ur.link → :8080"]
-  HUB -. "nested mode (tls=dns)" .-> N1["web.meabed.ur.link"]
-  T["token@meabed (role)"] -. owns .-> HUB
+  D --> HUB["meabed.ur.link<br/>namespace hub, auth-gated"]
+  HUB --> S1["web-meabed.ur.link to :3000"]
+  HUB --> S2["api-meabed.ur.link to :8080"]
+  HUB -. "nested mode, tls=dns" .-> N1["web.meabed.ur.link"]
+  T["token@meabed"] -. owns .-> HUB
 ```
 
 Default naming is single-level `<slug>-<namespace>` (one `*.ur.link` wildcard). Nested `<slug>.<namespace>` needs `tls-mode=dns` (per-namespace `*.<ns>.ur.link` certs).

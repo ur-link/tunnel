@@ -1,23 +1,44 @@
 # tunnel
 
-A self-hosted [ngrok](https://ngrok.com) / Tailscale-Funnel alternative you fully own — **your own client and server**, no third party.
+A self-hosted [ngrok](https://ngrok.com) alternative you fully own — **your own client and server**, no third party. Expose any local port at a public HTTPS URL through one outbound connection.
 
-A public **server** (the edge) behaves like a lightweight reverse proxy. A **client** opens a single persistent outbound WebSocket to it (so it works behind NAT/firewalls). Inbound public requests are multiplexed back down that one connection over [yamux](https://github.com/hashicorp/yamux) — one logical stream per request — and the client forwards them to your local service.
+## Get started
+
+```bash
+# 1 · run the server (Docker — gets its own Let's Encrypt cert)
+#     point *.tunnel.example.com + connect.tunnel.example.com at this host first
+docker run -d --name tunnel -p 80:80 -p 443:443 -p 7000:7000 -v tunnel-data:/data \
+  -e TUNNEL_DOMAIN=tunnel.example.com -e [email protected] \
+  ghcr.io/ur-link/tunnel:latest
+docker logs tunnel | grep ephemeral        # copy the auto-generated token
+
+# 2 · expose a local app — from any machine, no install
+npx @urlink/tunnel http 3000 \
+  --server wss://connect.tunnel.example.com --token <token> --name myapp
+#   ➜  https://myapp.tunnel.example.com
+```
+
+No server yet, just trying it locally? See [Quick start (local)](#quick-start-local). Other installs (brew, go, binary) and deploy recipes are below.
 
 ```mermaid
 flowchart LR
   B["Browser<br/>myapp.tunnel.example.com"]
-  subgraph SRV["tunnel server (public edge)"]
+  subgraph SRV["tunnel server"]
     E["Edge :80/:443<br/>host routing + reverse proxy"]
     C["Control :7000<br/>WebSocket + yamux"]
-    RG[("registry<br/>host → session")]
+    RG[("registry<br/>host to session")]
   end
-  CL["tunnel client<br/>(behind NAT)"]
+  CL["tunnel client<br/>behind NAT"]
   APP["localhost:3000"]
-  B -->|HTTPS| E --> RG
-  CL -->|"outbound wss + token"| C --> RG
-  E ==>|"yamux stream per request"| CL --> APP
+  B -->|HTTPS| E
+  E --> RG
+  CL -->|"outbound wss + token"| C
+  C --> RG
+  E ==>|"yamux stream per request"| CL
+  CL --> APP
 ```
+
+A **client** opens one persistent outbound WebSocket; inbound requests are multiplexed back over [yamux](https://github.com/hashicorp/yamux) (one stream per request) to your local service.
 
 ## Features
 
@@ -171,13 +192,13 @@ sequenceDiagram
   participant Rg as Registry
   participant Cl as Client
   participant App as Local app
-  B->>E: HTTPS (Host: web-meabed.ur.link)
-  E->>Rg: lookup(host) → session
-  E->>Cl: Open() yamux stream
-  Cl->>App: dial 127.0.0.1:3000, relay
-  App-->>Cl: response (HTTP / WS / SSE)
+  B->>E: HTTPS request, Host web-meabed.ur.link
+  E->>Rg: lookup host, get session
+  E->>Cl: open yamux stream
+  Cl->>App: dial 127.0.0.1:3000 and relay
+  App-->>Cl: response HTTP / WS / SSE
   Cl-->>E: bytes
-  E-->>B: response (immediate flush; Hijack for WS/SSE)
+  E-->>B: response, immediate flush, Hijack for WS/SSE
 ```
 
 Packages, the control handshake, edge host-routing flowchart, the discovery flow, and all HTTP/API surfaces (control, `/metrics`, `/_tunnel/status`, admin & hub APIs) — with more diagrams — are in **[docs/architecture.md](docs/architecture.md)**.
