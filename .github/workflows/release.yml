@@ -26,6 +26,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # GitHub forbids secrets.* in some if: expressions — surface presence flags once.
+  HAS_SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+  HAS_DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+
 jobs:
   release:
     name: Publish
@@ -136,3 +141,40 @@ jobs:
               echo "ℹ️ **No release** — no \`feat\`/\`fix\`/\`perf\` commits since the last tag."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Slack
+        # !cancelled() → notify on success and failure, but skip superseded (cancelled) builds.
+        if: ${{ !cancelled() && env.HAS_SLACK_WEBHOOK_URL == 'true' }}
+        # Official, Slack-maintained action (replaces the now-archived 8398a7/action-slack).
+        uses: slackapi/slack-github-action@v3.0.3
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          # Status-aware. Only trusted GitHub context fields are interpolated (injection-safe).
+          payload: |
+            text: "${{ job.status == 'success' && ':white_check_mark:' || ':x:' }} ${{ github.repository }} build ${{ job.status }} on ${{ github.ref_name }}"
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "${{ job.status == 'success' && ':white_check_mark:' || ':x:' }} *${{ github.repository }}* build *${{ job.status }}* on `${{ github.ref_name }}`\n*Workflow:* ${{ github.workflow }}  •  *By:* ${{ github.actor }}  •  *Commit:* `${{ github.sha }}`"
+              - type: "actions"
+                elements:
+                  - type: "button"
+                    text:
+                      type: "plain_text"
+                      text: "View run"
+                    url: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Notify Discord
+        # !cancelled() → notify on success and failure; sarisia colors the embed by status.
+        if: ${{ !cancelled() && env.HAS_DISCORD_WEBHOOK_URL == 'true' }}
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          status: ${{ job.status }}
+          title: ${{ github.repository }}
+          # Ping @here only when it needs attention (failure/cancelled); quiet on success.
+          content: "${{ job.status != 'success' && '@here' || '' }}"
+          username: GitHub Actions
+          nofail: true

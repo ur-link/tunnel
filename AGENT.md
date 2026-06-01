@@ -11,6 +11,7 @@ Working rules, code style, and patterns for this repo. **Not** a product spec �
 - [docs/testing.md](docs/testing.md) — how tests are structured and run.
 - [docs/TLS.md](docs/TLS.md) — TLS modes (`acme`/`dns`/`file`/`off`), certificates, persistence.
 - [docs/multi-tenant.md](docs/multi-tenant.md) — namespaces, identity, hub/admin, discovery, roadmap.
+- [docs/ci-notifications.md](docs/ci-notifications.md) — Slack + Discord CI build notifications (success + failure, status-aware, secret-gated, reusable across repos).
 
 When a feature is added or changed, update the relevant doc above (and this file if a *rule/pattern* changed) in the same change.
 
