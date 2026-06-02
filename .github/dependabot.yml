@@ -1,29 +1,43 @@
 version: 2
+# Grouped so each ecosystem opens at most ONE PR (one for version updates, one
+# for security updates) — no mass PR storms. Actions are pinned to commit SHAs;
+# Dependabot bumps the SHA + the "# vX.Y.Z" comment.
 updates:
-  # GitHub Actions are pinned to commit SHAs (supply-chain hardening); Dependabot
-  # bumps the SHA + the "# vX.Y.Z" comment when a new release ships.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: 'weekly'
+    open-pull-requests-limit: 1
     groups:
-      actions:
-        patterns: ["*"]
+      all-dependencies:
+        applies-to: 'version-updates'
+        patterns: ['*']
+      all-security-dependencies:
+        applies-to: 'security-updates'
+        patterns: ['*']
 
-  # Go module dependencies.
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: 'weekly'
+    open-pull-requests-limit: 1
     groups:
-      go-deps:
-        patterns: ["*"]
+      all-dependencies:
+        applies-to: 'version-updates'
+        patterns: ['*']
+      all-security-dependencies:
+        applies-to: 'security-updates'
+        patterns: ['*']
 
-  # npm devDependencies (semantic-release toolchain for the launcher package).
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: 'weekly'
+    open-pull-requests-limit: 1
     groups:
-      npm-deps:
-        patterns: ["*"]
+      all-dependencies:
+        applies-to: 'version-updates'
+        patterns: ['*']
+      all-security-dependencies:
+        applies-to: 'security-updates'
+        patterns: ['*']
