@@ -1,0 +1,72 @@
+/* Tailwind v4 entry for the tunnel web UI. Built to static/app.css (committed) by
+ * `make ui`; embedded into the binary. templui components use the shadcn-style
+ * CSS-variable theme below. */
+@import "tailwindcss";
+
+/* Scan the templ sources (this package + templui components) for utility classes. */
+@source "./*.templ";
+@source "./components/**/*.templ";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Neutral, modern-minimal theme (light). */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.99 0.003 260);
+  --foreground: oklch(0.24 0.02 264);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.24 0.02 264);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.24 0.02 264);
+  --primary: oklch(0.55 0.17 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.97 0.004 260);
+  --secondary-foreground: oklch(0.24 0.02 264);
+  --muted: oklch(0.97 0.004 260);
+  --muted-foreground: oklch(0.52 0.02 264);
+  --accent: oklch(0.97 0.004 260);
+  --accent-foreground: oklch(0.24 0.02 264);
+  --destructive: oklch(0.56 0.19 22);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.62 0.15 150);
+  --border: oklch(0.91 0.006 264);
+  --input: oklch(0.91 0.006 264);
+  --ring: oklch(0.6 0.18 264);
+}
+
+/* Map the CSS variables to Tailwind color/radius tokens (templui uses bg-primary,
+ * text-muted-foreground, border-border, rounded-lg, etc.). */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}

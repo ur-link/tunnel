@@ -45,7 +45,7 @@ When a feature is added or changed, update the relevant doc above (and this file
 - **Persistence**: file-backed stores write atomically (tmp + rename); load at boot; tolerate a missing file. Empty/partial reads must not wipe live state.
 - **TLS**: four modes (`acme` per-host autocert · `dns` lego wildcard · `file` mounted+hot-reload · `off` behind proxy). DNS providers are a **curated set** (avoid lego's all-providers aggregator — binary bloat). See [docs/TLS.md](docs/TLS.md).
 - **Discovery** (`internal/discover`): lsof/netstat → runtime classify → project-root slug (prefer manifest name: package.json/go.mod/Cargo/pyproject). Within a project: lowest-port process = main (clean slug), other processes suffixed `-<port>`, same-process extra ports collapse. Path containment is symlink-resolved.
-- **UI**: server-rendered templ + HTMX, OKLCH design tokens (modern-minimal), 8-state interactive controls, responsive; assets embedded. Browser auth = httpOnly token cookie; CLI = Bearer.
+- **UI** (`internal/web`): server-rendered **templ + HTMX + templui** components on **Tailwind v4** (shadcn-style theme in `input.css`, OKLCH tokens). The built `static/app.css` and generated `*_templ.go` are **committed and embedded** — CI builds without the toolchain. Edit `*.templ`/styles, then `make ui` (needs the `tailwindcss` standalone CLI + the templ CLI) to regenerate both. HTMX is vendored. Browser auth = httpOnly token cookie; CLI = Bearer.
 
 ## Releases
 

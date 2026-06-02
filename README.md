@@ -212,7 +212,7 @@ Packages, the control handshake, edge host-routing flowchart, the discovery flow
 ```bash
 make test-race   # race suite (unit + in-process e2e: HTTP, SSE, WebSocket, concurrency)
 make lint        # gofmt + go vet
-make generate    # regenerate templ UI after editing internal/web/*.templ
+make ui          # regenerate templ + Tailwind CSS after editing internal/web/*.templ (needs tailwindcss CLI)
 ```
 
 Contributor rules, code style, and patterns live in **[AGENT.md](AGENT.md)**; testing approach in **[docs/testing.md](docs/testing.md)**.

@@ -1,5 +1,13 @@
 package web
 
+import (
+	"github.com/ur-link/tunnel/internal/web/components/badge"
+	"github.com/ur-link/tunnel/internal/web/components/button"
+	"github.com/ur-link/tunnel/internal/web/components/card"
+	"github.com/ur-link/tunnel/internal/web/components/input"
+	"github.com/ur-link/tunnel/internal/web/components/label"
+)
+
 // View models (plain data; the server package maps its types onto these so web
 // never imports server — no import cycle).
 
@@ -44,156 +52,211 @@ templ layout(title, who string) {
 			</style>
 			<script src="/_static/htmx.min.js" defer></script>
 		</head>
-		<body>
-			<div class="topbar">
-				<div class="brand"><span class="dot"></span> tunnel <span class="sub">{ title }</span></div>
+		<body class="min-h-screen bg-background text-foreground antialiased">
+			<header class="flex items-center justify-between gap-4 border-b border-border bg-card px-6 py-4">
+				<div class="flex items-baseline gap-3 font-semibold tracking-tight">
+					<span class="inline-block size-2 rounded-full bg-primary"></span>
+					tunnel
+					<span class="text-sm font-normal text-muted-foreground">{ title }</span>
+				</div>
 				if who != "" {
-					<div class="who">{ who }</div>
+					<div class="font-mono text-sm text-muted-foreground">{ who }</div>
 				}
-			</div>
-			<div class="wrap">
+			</header>
+			<main class="mx-auto max-w-4xl px-6 py-8 pb-16">
 				{ children... }
-			</div>
+			</main>
 		</body>
 	</html>
 }
 
 templ statusBadge(online bool) {
 	if online {
-		<span class="badge on"><span class="pip"></span> online</span>
+		<span class="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
+			<span class="size-1.5 rounded-full bg-success ring-2 ring-success/25"></span> online
+		</span>
 	} else {
-		<span class="badge off"><span class="pip"></span> offline</span>
+		<span class="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+			<span class="size-1.5 rounded-full bg-muted-foreground/60"></span> offline
+		</span>
 	}
 }
 
 templ servicesTable(services []ServiceRow, showNS bool) {
 	if len(services) == 0 {
-		<div class="empty">No services yet. Start a client and they'll appear here.</div>
+		<div class="px-6 py-12 text-center text-sm text-muted-foreground">No services yet. Start a client and they'll appear here.</div>
 	} else {
-		<table>
-			<thead>
-				<tr>
-					if showNS {
-						<th>Namespace</th>
-					}
-					<th>Service</th>
-					<th>Status</th>
-					<th class="right">Requests</th>
-					<th>Last seen</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, s := range services {
-					<tr>
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
 						if showNS {
-							<td data-label="Namespace" class="mono">{ orDash(s.Namespace) }</td>
+							<th class="px-4 py-3 font-medium">Namespace</th>
 						}
-						<td data-label="Service" class="host"><a href={ templ.URL(s.URL) } target="_blank" rel="noopener">{ s.Host }</a></td>
-						<td data-label="Status">@statusBadge(s.Online)</td>
-						<td data-label="Requests" class="right mono">{ itoa(s.Requests) }</td>
-						<td data-label="Last seen" class="muted">{ s.LastSeen }</td>
+						<th class="px-4 py-3 font-medium">Service</th>
+						<th class="px-4 py-3 font-medium">Status</th>
+						<th class="px-4 py-3 text-right font-medium">Requests</th>
+						<th class="px-4 py-3 font-medium">Last seen</th>
 					</tr>
-				}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					for _, s := range services {
+						<tr class="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
+							if showNS {
+								<td class="px-4 py-3 font-mono text-xs">{ orDash(s.Namespace) }</td>
+							}
+							<td class="px-4 py-3"><a class="font-mono text-primary hover:underline" href={ templ.URL(s.URL) } target="_blank" rel="noopener">{ s.Host }</a></td>
+							<td class="px-4 py-3">@statusBadge(s.Online)</td>
+							<td class="px-4 py-3 text-right font-mono tabular-nums">{ itoa(s.Requests) }</td>
+							<td class="px-4 py-3 text-muted-foreground">{ s.LastSeen }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	}
 }
 
 templ usersTable(users []UserRow) {
 	if len(users) == 0 {
-		<div class="empty">No users yet — create one below.</div>
+		<div class="px-6 py-12 text-center text-sm text-muted-foreground">No users yet — create one below.</div>
 	} else {
-		<table>
-			<thead>
-				<tr><th>Namespace</th><th>Label</th><th>Role</th><th>Token</th><th class="right">Actions</th></tr>
-			</thead>
-			<tbody>
-				for _, u := range users {
-					<tr>
-						<td data-label="Namespace" class="mono">{ orDash(u.Namespace) }</td>
-						<td data-label="Label">{ orDash(u.Label) }</td>
-						<td data-label="Role"><span class="badge role">{ u.Role }</span></td>
-						<td data-label="Token"><span class="tokchip">{ u.Token }</span></td>
-						<td data-label="Actions" class="right">
-							<form method="post" action="/users/rotate" style="display:inline">
-								<input type="hidden" name="token" value={ u.Token }/>
-								<button class="btn ghost sm" type="submit">Rotate</button>
-							</form>
-							<form method="post" action="/users/delete" style="display:inline">
-								<input type="hidden" name="token" value={ u.Token }/>
-								<button class="btn danger sm" type="submit">Delete</button>
-							</form>
-						</td>
+		<div class="overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+						<th class="px-4 py-3 font-medium">Namespace</th>
+						<th class="px-4 py-3 font-medium">Label</th>
+						<th class="px-4 py-3 font-medium">Role</th>
+						<th class="px-4 py-3 font-medium">Token</th>
+						<th class="px-4 py-3 text-right font-medium">Actions</th>
 					</tr>
-				}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					for _, u := range users {
+						<tr class="border-b border-border last:border-0">
+							<td class="px-4 py-3 font-mono text-xs">{ orDash(u.Namespace) }</td>
+							<td class="px-4 py-3">{ orDash(u.Label) }</td>
+							<td class="px-4 py-3">
+								@badge.Badge(badge.Props{Variant: badge.VariantSecondary}) {
+									{ u.Role }
+								}
+							</td>
+							<td class="px-4 py-3"><code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{ u.Token }</code></td>
+							<td class="px-4 py-3">
+								<div class="flex justify-end gap-2">
+									<form method="post" action="/users/rotate">
+										<input type="hidden" name="token" value={ u.Token }/>
+										@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Size: button.SizeSm}) {
+											Rotate
+										}
+									</form>
+									<form method="post" action="/users/delete">
+										<input type="hidden" name="token" value={ u.Token }/>
+										@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantDestructive, Size: button.SizeSm}) {
+											Delete
+										}
+									</form>
+								</div>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	}
 }
 
-templ footer(domain string) {
-	<div class="foot"><span class="mono">{ domain }</span><span class="muted">self-hosted tunnel</span></div>
+templ sectionTitle(text string) {
+	<h2 class="mb-3 mt-10 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{ text }</h2>
 }
 
 templ adminConsole(v AdminView) {
 	@layout("admin", v.Domain) {
-		<h1>Admin console</h1>
-		<p class="lede">Manage users, namespaces and tokens for <span class="mono">{ v.Domain }</span>.</p>
-		<h2>Users</h2>
-		<div class="card">
+		<h1 class="text-2xl font-semibold tracking-tight">Admin console</h1>
+		<p class="mt-1 text-muted-foreground">Manage users, namespaces and tokens for <span class="font-mono">{ v.Domain }</span>.</p>
+		@sectionTitle("Users")
+		@card.Card() {
 			@usersTable(v.Users)
-		</div>
-		<h2>New user</h2>
-		<div class="card">
-			<form class="row" method="post" action="/users">
-				<div class="field"><label>Namespace</label><input class="input" name="namespace" placeholder="meabed" required/></div>
-				<div class="field"><label>Label</label><input class="input" name="label" placeholder="Mohamed"/></div>
-				<div class="field">
-					<label>Role</label>
-					<select class="input" name="role">
+		}
+		@sectionTitle("New user")
+		@card.Card(card.Props{Class: "p-4"}) {
+			<form method="post" action="/users" class="flex flex-wrap items-end gap-3">
+				<div class="flex flex-col gap-1.5">
+					@label.Label(label.Props{For: "ns"}) {
+						Namespace
+					}
+					@input.Input(input.Props{ID: "ns", Name: "namespace", Placeholder: "meabed", Required: true, Class: "w-44"})
+				</div>
+				<div class="flex flex-col gap-1.5">
+					@label.Label(label.Props{For: "label"}) {
+						Label
+					}
+					@input.Input(input.Props{ID: "label", Name: "label", Placeholder: "Mohamed", Class: "w-44"})
+				</div>
+				<div class="flex flex-col gap-1.5">
+					@label.Label(label.Props{For: "role"}) {
+						Role
+					}
+					<select id="role" name="role" class="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
 						<option value="user">user</option>
 						<option value="admin">admin</option>
 					</select>
 				</div>
-				<button class="btn" type="submit">Create user</button>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					Create user
+				}
 			</form>
-		</div>
-		<h2>Services</h2>
-		<div class="card" hx-get="/partials/services" hx-trigger="every 5s" hx-swap="innerHTML">
+		}
+		@sectionTitle("Services")
+		@card.Card(card.Props{Attributes: templ.Attributes{"hx-get": "/partials/services", "hx-trigger": "every 5s", "hx-swap": "innerHTML"}}) {
 			@servicesTable(v.Services, true)
-		</div>
+		}
 		@footer(v.Domain)
 	}
 }
 
 templ hubPage(v HubView) {
 	@layout(v.Namespace, v.Namespace + "." + v.Domain) {
-		<h1>{ v.Namespace }</h1>
-		<p class="lede">Services published on <span class="mono">{ v.Namespace }.{ v.Domain }</span>.</p>
-		<div class="card" hx-get="/partials/services" hx-trigger="every 5s" hx-swap="innerHTML">
-			@servicesTable(v.Services, false)
+		<h1 class="text-2xl font-semibold tracking-tight">{ v.Namespace }</h1>
+		<p class="mt-1 text-muted-foreground">Services published on <span class="font-mono">{ v.Namespace }.{ v.Domain }</span>.</p>
+		<div class="mt-6">
+			@card.Card(card.Props{Attributes: templ.Attributes{"hx-get": "/partials/services", "hx-trigger": "every 5s", "hx-swap": "innerHTML"}}) {
+				@servicesTable(v.Services, false)
+			}
 		</div>
 		@footer(v.Domain)
 	}
 }
 
+templ footer(domain string) {
+	<div class="mt-12 flex justify-between gap-4 border-t border-border pt-6 text-xs text-muted-foreground">
+		<span class="font-mono">{ domain }</span>
+		<span>self-hosted tunnel</span>
+	</div>
+}
+
 templ loginPage(title, action, errMsg string) {
 	@layout(title, "") {
-		<div class="login">
-			<div class="card">
-				<h1>{ title }</h1>
-				<p class="muted" style="margin-top:0">Sign in with your access token.</p>
+		<div class="mx-auto mt-[12vh] max-w-sm">
+			@card.Card(card.Props{Class: "p-8"}) {
+				<h1 class="text-xl font-semibold tracking-tight">{ title }</h1>
+				<p class="mt-1 text-sm text-muted-foreground">Sign in with your access token.</p>
 				if errMsg != "" {
-					<p class="err">{ errMsg }</p>
+					<p class="mt-4 text-sm text-destructive">{ errMsg }</p>
 				}
-				<form method="post" action={ templ.SafeURL(action) }>
-					<div class="field">
-						<label>Access token</label>
-						<input class="input" type="password" name="token" placeholder="paste your token" autofocus required/>
+				<form method="post" action={ templ.SafeURL(action) } class="mt-5 flex flex-col gap-4">
+					<div class="flex flex-col gap-1.5">
+						@label.Label(label.Props{For: "token"}) {
+							Access token
+						}
+						@input.Input(input.Props{ID: "token", Type: input.TypePassword, Name: "token", Placeholder: "paste your token", Required: true, NoTogglePassword: true})
 					</div>
-					<button class="btn" type="submit">Sign in</button>
+					@button.Button(button.Props{Type: button.TypeSubmit, FullWidth: true}) {
+						Sign in
+					}
 				</form>
-			</div>
+			}
 		</div>
 	}
 }

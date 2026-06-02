@@ -3,6 +3,7 @@ module github.com/ur-link/tunnel
 go 1.26.3
 
 require (
+	github.com/Oudwins/tailwind-merge-go v0.2.1
 	github.com/a-h/templ v0.3.1020
 	github.com/coder/websocket v1.8.14
 	github.com/go-acme/lego/v4 v4.35.2
@@ -16,6 +17,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.5
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
+	github.com/templui/templui v1.12.0
 	golang.org/x/crypto v0.52.0
 )
 
@@ -35,7 +37,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.3 // indirect
 	golang.org/x/mod v0.35.0 // indirect

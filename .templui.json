@@ -1,0 +1,7 @@
+{
+  "componentsDir": "internal/web/components",
+  "utilsDir": "internal/web/utils",
+  "moduleName": "github.com/ur-link/tunnel",
+  "jsDir": "internal/web/static/js",
+  "jsPublicPath": "/_static/js"
+}

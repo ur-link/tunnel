@@ -3,6 +3,10 @@
 generate: ## Regenerate templ components (run after editing internal/web/*.templ)
 	go run github.com/a-h/templ/cmd/templ@latest generate
 
+ui: generate ## Regenerate templ + rebuild the Tailwind CSS (needs the tailwindcss standalone CLI on PATH)
+	tailwindcss -i internal/web/input.css -o internal/web/static/app.css --minify
+	@echo "committed: internal/web/static/app.css (+ *_templ.go). CI builds from these — no toolchain needed."
+
 
 BIN     ?= tunnel
 VERSION ?= dev
