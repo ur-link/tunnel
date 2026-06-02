@@ -50,5 +50,6 @@ When a feature is added or changed, update the relevant doc above (and this file
 ## Releases
 
 - **Conventional commits** drive semantic-release: `feat`→minor, `fix`/`perf`/`refactor`→patch, `docs`/`chore`/`ci`/`build`/`test`→no release. Use accurate types — a `feat`/`fix` ships a version.
-- Push to `master` runs the pipeline: goreleaser (6 targets) → per-platform npm packages + launcher → Homebrew cask → GitHub release; the release event triggers the multi-arch Docker build (GHCR + Docker Hub). Secrets: `NPM_TOKEN`, `GH_PAT`, `DOCKER_PAT`.
+- Push to `master` runs the pipeline: goreleaser (6 targets) → per-platform npm packages + launcher → Homebrew cask → GitHub release; the release event triggers the multi-arch Docker build (GHCR + Docker Hub). Secrets: `NPM_TOKEN`, `GH_PAT`, `DOCKER_PAT` (+ optional `SLACK_WEBHOOK_URL`/`DISCORD_WEBHOOK_URL` for notifications).
+- **Pin GitHub Actions to commit SHAs** (`uses: owner/repo@<40-char-sha> # vX.Y.Z`) — never bare tags. Resolve with `gh api repos/<o>/<r>/commits/<tag> --jq .sha`; [`.github/dependabot.yml`](.github/dependabot.yml) keeps SHAs (and go/npm deps) current.
 - Commit/push only when asked; branch off `master`/`main` for non-trivial work.

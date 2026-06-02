@@ -83,7 +83,11 @@ The status-aware emoji uses GitHub's `A && B || C` expression idiom (operator `&
 - **Secret-gated.** The `HAS_*_WEBHOOK_URL` flag skips the step entirely when the secret is missing — safe in forks and new repos.
 - **Injection-safe.** Only **trusted** GitHub context fields are interpolated (`repository`, `ref_name`, `workflow`, `actor`, `sha`, run URL). Never interpolate free-text attacker-controllable fields (commit message, PR title/body) into a `payload:` or `run:` — pass those via `env:` if ever needed. See <https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/>.
 
-## Updating versions
+## Pinning & updates
 
-- Slack: pin to the newest exact tag — check <https://github.com/slackapi/slack-github-action/releases> and bump `@v3.0.3`.
-- Discord: `@v1` auto-tracks the latest `v1.x`; only change it if a `v2` ships with a migration note.
+In this repo **every** action is pinned to a full commit SHA (with a `# vX.Y.Z`
+comment) for supply-chain safety — the tag examples above are for readability.
+[`.github/dependabot.yml`](../.github/dependabot.yml) bumps the SHA + comment when a
+new release ships (the `github-actions` ecosystem), so pins stay current without
+trusting a movable tag. To pin a new action, resolve its tag to a commit:
+`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`.

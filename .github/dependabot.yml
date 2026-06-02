@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # GitHub Actions are pinned to commit SHAs (supply-chain hardening); Dependabot
+  # bumps the SHA + the "# vX.Y.Z" comment when a new release ships.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Go module dependencies.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-deps:
+        patterns: ["*"]
+
+  # npm devDependencies (semantic-release toolchain for the launcher package).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-deps:
+        patterns: ["*"]
