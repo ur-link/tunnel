@@ -14,11 +14,17 @@ import (
 //   - anything else     -> a tunnel (registry lookup)
 func (s *Server) edgeHandler() http.Handler {
 	admin := s.adminMux()
+	control := s.controlMux()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sub, full := s.edgeRoute(r.Host)
 		switch {
 		case sub == "":
 			s.writeEdgeIndex(w, http.StatusNotFound, fmt.Sprintf("no tunnel for host %q", r.Host))
+		case s.cfg.ControlHost != "" && sub == s.cfg.ControlHost:
+			// Serve the control plane on the edge too, so clients reach it over the
+			// edge's TLS at wss://<control-host>.<domain> (single port, works behind
+			// Cloudflare-proxied / any L7 that only forwards :80/:443).
+			control.ServeHTTP(w, r)
 		case sub == "admin":
 			admin.ServeHTTP(w, r)
 		case !strings.Contains(sub, ".") && s.tokens.Namespaces()[sub]:

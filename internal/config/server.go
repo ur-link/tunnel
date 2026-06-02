@@ -21,9 +21,10 @@ type Server struct {
 	TLSCacheDir      string // ACME cert cache directory
 	TLSCertFile      string // file mode: PEM certificate (chain) path
 	TLSKeyFile       string // file mode: PEM private key path
-	TLSDNSProvider   string // dns mode: lego DNS provider name (cloudflare, route53, …)
+	TLSDNSProvider   string // dns mode: lego DNS provider name (cloudflare, digitalocean)
 	NestedSubdomains bool   // <slug>.<namespace>.<domain> instead of <slug>-<namespace>
 	RoutingMode      string // "subdomain" (host-routed) | "path" (<ns>.<domain>/<slug>/…)
+	ControlHost      string // subdomain label also served on the edge for the control plane (default "connect")
 	TrustForwarded   bool   // trust X-Forwarded-* (true behind Traefik/nginx)
 
 	Tokens     string // inline token store (see auth.go for format)
@@ -60,6 +61,7 @@ func serverDefaults() map[string]any {
 		"tls_dns_provider":    "",
 		"nested_subdomains":   false,
 		"routing_mode":        "subdomain",
+		"control_host":        "connect",
 		"trust_forwarded":     false,
 		"tokens":              "",
 		"tokens_file":         "",
@@ -106,6 +108,7 @@ func RegisterServerFlags(f *pflag.FlagSet) {
 	f.String("tls-dns-provider", "", "lego DNS-01 provider for wildcard certs, e.g. cloudflare (tls-mode=dns)")
 	f.Bool("nested-subdomains", false, "address services as <slug>.<namespace>.<domain> (needs tls-mode=dns)")
 	f.String("routing-mode", "subdomain", "how services are addressed: subdomain | path (<namespace>.<domain>/<slug>)")
+	f.String("control-host", "connect", "subdomain label served on the edge for the client control plane (TLS over :443)")
 	f.Bool("trust-forwarded", false, "trust X-Forwarded-* headers (set behind Traefik/nginx)")
 	f.String("tokens", "", "inline auth tokens, e.g. 'tok1@ns1,tok2@ns2:name'")
 	f.String("tokens-file", "", "path to a file containing auth tokens (hot-reloaded)")
@@ -158,6 +161,7 @@ func LoadServer(f *pflag.FlagSet) (*Server, error) {
 		TLSDNSProvider:    k.String("tls_dns_provider"),
 		NestedSubdomains:  k.Bool("nested_subdomains"),
 		RoutingMode:       k.String("routing_mode"),
+		ControlHost:       k.String("control_host"),
 		TrustForwarded:    k.Bool("trust_forwarded"),
 		Tokens:            k.String("tokens"),
 		TokensRaw:         tokensRaw,

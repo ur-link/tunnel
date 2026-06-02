@@ -17,8 +17,11 @@ tunnel server --domain tunnel.example.com --tls-mode dns \
 ```
 The server obtains a single `*.tunnel.example.com` cert on demand and renews it in
 place — no per-host issuance, so no Let's Encrypt rate-limit risk. Built-in providers:
-**cloudflare, route53, digitalocean, gcloud** (add more by importing the lego provider).
-Each reads its standard env vars (`CF_DNS_API_TOKEN`, `AWS_*`, `DO_AUTH_TOKEN`, `GCE_PROJECT`).
+**cloudflare, digitalocean** — kept deliberately small (the heavy AWS/GCP SDKs are
+excluded to keep the binary ~13 MB). Each reads its standard env vars
+(`CF_DNS_API_TOKEN`, `DO_AUTH_TOKEN`). Need another provider? Import its lego
+provider and add a case (accepting the size cost), or use `tls-mode=file` with a
+cert from your own DNS-01 tooling.
 
 **Nested subdomains** (`--nested-subdomains`, requires `dns` mode): services are addressed
 `<slug>.<namespace>.<domain>` (e.g. `web.meabed.tunnel.example.com`) instead of the default

@@ -1,0 +1,40 @@
+# Cloudflare proxied (orange) + Traefik in front — WITH Traefik.
+# Lowest-priority combo: Cloudflare terminates public TLS, Traefik routes on the
+# origin (handy when other apps share the host). Cloudflare SSL/TLS = Flexible, so
+# the CF↔origin hop is plain HTTP into Traefik :80 (firewall origin to CF IPs).
+# For Full(strict), give Traefik a Cloudflare Origin Cert and add a websecure router.
+#
+# DNS (orange 🟠, needs ACM for *.t.ur.link, or use base domain ur.link): *.t, connect.t.
+#   DOMAIN=t.ur.link docker compose -f deploy/cloudflare/docker-compose.proxied-traefik.yml up -d
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80" # Cloudflare (Flexible) connects here
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: ${DOMAIN:-t.ur.link}
+      TUNNEL_TLS_MODE: "off"
+      TUNNEL_TRUST_FORWARDED: "true"
+      TUNNEL_HTTP_ADDR: ":80"
+      TUNNEL_TOKENS_FILE: /etc/tunnel/tokens
+      TUNNEL_LOG_FORMAT: json
+    volumes:
+      - ./tunnel:/etc/tunnel:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.tunnel.rule: "Host(`*.${DOMAIN:-t.ur.link}`)"
+      traefik.http.routers.tunnel.entrypoints: web
+      traefik.http.services.tunnel.loadbalancer.server.port: "80"

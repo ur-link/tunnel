@@ -25,28 +25,25 @@ import (
 
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/digitalocean"
-	"github.com/go-acme/lego/v4/providers/dns/gcloud"
-	"github.com/go-acme/lego/v4/providers/dns/route53"
 
 	"github.com/ur-link/tunnel/internal/config"
 )
 
-// newDNSProvider returns a curated DNS-01 provider by name. Each reads its
+// newDNSProvider returns a built-in DNS-01 provider by name. Each reads its
 // credentials from the provider's standard env vars (see go-acme/lego docs).
-// Kept curated (not lego's all-providers aggregator) so the binary stays lean;
-// add a case + import to support another provider.
+// Deliberately limited to lightweight providers so the binary stays small —
+// the heavy ones (route53 pulls the full aws-sdk-go, gcloud pulls the Google
+// Cloud SDK) are intentionally excluded. Need another? Import its lego provider
+// and add a case (and accept the size cost), or use tls-mode=file with a cert
+// from your own DNS-01 tooling.
 func newDNSProvider(name string) (challenge.Provider, error) {
 	switch strings.ToLower(name) {
 	case "cloudflare": // CF_DNS_API_TOKEN (or CF_API_EMAIL + CF_API_KEY)
 		return cloudflare.NewDNSProvider()
-	case "route53": // AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
-		return route53.NewDNSProvider()
 	case "digitalocean": // DO_AUTH_TOKEN
 		return digitalocean.NewDNSProvider()
-	case "gcloud": // GCE_PROJECT + application default credentials
-		return gcloud.NewDNSProvider()
 	default:
-		return nil, fmt.Errorf("unsupported dns provider %q (built-in: cloudflare, route53, digitalocean, gcloud)", name)
+		return nil, fmt.Errorf("unsupported dns provider %q (built-in: cloudflare, digitalocean; use tls-mode=file for others)", name)
 	}
 }
 

@@ -1,0 +1,57 @@
+# Cloudflare DNS-only (grey) + Traefik does ACME — WITH Traefik.
+# Use this only if Traefik already fronts other sites on the host; otherwise the
+# no-Traefik dns-acme.yml is simpler (the tunnel server is already a reverse proxy).
+#
+# Cloudflare DNS (grey ⚪): *.t and connect.t  A/AAAA -> server IP.
+# Traefik issues the *.t.ur.link wildcard via DNS-01 (Cloudflare token) and routes
+# every <x>.t.ur.link (services, connect, admin, hubs) to the tunnel edge on :80.
+#
+#   export CF_DNS_API_TOKEN=...   # Zone:DNS:Edit on ur.link
+#   DOMAIN=t.ur.link docker compose -f deploy/cloudflare/docker-compose.dns-traefik.yml up -d
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.dnschallenge=true
+      - --certificatesresolvers.le.acme.dnschallenge.provider=cloudflare
+      - "--certificatesresolvers.le.acme.email[email protected]"
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:?set a Cloudflare API token with Zone:DNS:Edit}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: ${DOMAIN:-t.ur.link}
+      TUNNEL_TLS_MODE: "off"
+      TUNNEL_TRUST_FORWARDED: "true"
+      TUNNEL_HTTP_ADDR: ":80"
+      TUNNEL_TOKENS_FILE: /etc/tunnel/tokens
+      TUNNEL_LOG_FORMAT: json
+    volumes:
+      - ./tunnel:/etc/tunnel:ro
+    labels:
+      traefik.enable: "true"
+      # One wildcard router covers services + connect.<domain> + admin.<domain>;
+      # the tunnel edge routes by Host internally.
+      traefik.http.routers.tunnel.rule: "Host(`*.${DOMAIN:-t.ur.link}`)"
+      traefik.http.routers.tunnel.entrypoints: websecure
+      traefik.http.routers.tunnel.tls: "true"
+      traefik.http.routers.tunnel.tls.certresolver: le
+      traefik.http.routers.tunnel.tls.domains[0].main: ${DOMAIN:-t.ur.link}
+      traefik.http.routers.tunnel.tls.domains[0].sans: "*.${DOMAIN:-t.ur.link}"
+      traefik.http.services.tunnel.loadbalancer.server.port: "80"

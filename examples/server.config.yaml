@@ -8,6 +8,8 @@ domain: tunnel.example.com      # tunnels become <name>.tunnel.example.com
 #   subdomain : <slug>-<namespace>.<domain>  (default; one *.<domain> wildcard)
 #   path      : <namespace>.<domain>/<slug>/  (path routing + affinity cookie)
 routing_mode: subdomain
+# control_host: connect   # client control plane is served on the edge at
+#                         # wss://<control_host>.<domain> (single :443 port)
 
 # --- Listeners ---
 http_addr: ":80"                # public HTTP edge

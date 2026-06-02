@@ -156,6 +156,8 @@ See [`examples/server.config.yaml`](examples/server.config.yaml) and [`examples/
 
 Persist `TUNNEL_TLS_CACHE_DIR` (acme cache) and mount your `config.yaml`/`tokens` under `/etc/tunnel` so restarts keep state — see [docs/TLS.md](docs/TLS.md).
 
+**Behind Cloudflare** (wildcard `*.t.ur.link`, proxied or DNS-only, with/without Traefik): see **[docs/cloudflare.md](docs/cloudflare.md)** + ready compose files in [`deploy/cloudflare/`](deploy/cloudflare/). The control plane is served on the edge (`wss://connect.<domain>` over `:443`), so a single port works behind Cloudflare's proxy.
+
 ### Standalone (own TLS)
 
 ```bash

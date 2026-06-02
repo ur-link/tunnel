@@ -1,0 +1,40 @@
+# Cloudflare DNS-only (grey cloud) + the server does all ACME — NO Traefik.
+# Recommended free path for a deep wildcard like *.t.ur.link.
+#
+# Cloudflare DNS (zone ur.link), both DNS-only (grey ⚪):
+#   *.t        A/AAAA  -> your server IP
+#   connect.t  A/AAAA  -> your server IP   (or covered by *.t)
+#
+# The server obtains a real *.t.ur.link cert from Let's Encrypt via DNS-01 using a
+# scoped Cloudflare API token (Zone:DNS:Edit on ur.link). One cert, auto-renewed.
+# Control plane rides the edge TLS at wss://connect.t.ur.link (no separate port).
+#
+#   export CF_DNS_API_TOKEN=...   # Cloudflare → My Profile → API Tokens → Edit zone DNS
+#   DOMAIN=t.ur.link docker compose -f deploy/cloudflare/docker-compose.dns-acme.yml up -d
+#   docker logs tunnel | grep ephemeral      # grab the admin token
+services:
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: ${DOMAIN:-t.ur.link}
+      TUNNEL_TLS_MODE: dns
+      TUNNEL_TLS_DNS_PROVIDER: cloudflare
+      TUNNEL_TLS_ACME_EMAIL: "[email protected]" # ← change to your email
+      TUNNEL_TLS_CACHE_DIR: /data/certs
+      TUNNEL_TOKENS_FILE: /etc/tunnel/tokens
+      TUNNEL_LOG_FORMAT: json
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:?set a Cloudflare API token with Zone:DNS:Edit}
+    ports:
+      - "80:80"   # ACME + redirect to https
+      - "443:443" # public edge AND wss://connect.<domain> control plane
+    volumes:
+      - ./tunnel:/etc/tunnel:ro # put your tokens file here (one "token@namespace" per line)
+      - tunnel-data:/data       # ACME wildcard cert, persisted
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+
+volumes:
+  tunnel-data:

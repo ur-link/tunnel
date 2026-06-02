@@ -106,8 +106,9 @@ sequenceDiagram
 ## Edge host routing (`server/edge.go`)
 
 `edgeRoute(host)` strips port + base domain → `sub`, `full`:
+- `sub == control-host` (default `connect`) → the **control plane** (`/_tunnel/connect`), so clients reach it over the edge's TLS at `wss://connect.<domain>` — a single port, no separate `:7000` exposure (the dedicated control listener still runs for behind-proxy/L4 setups).
 - `sub == "admin"` → admin console/API.
-- bare namespace label (no dot, known namespace) → that namespace's **hub** (`handleHub`).
+- bare namespace label (no dot, known namespace) → that namespace's **hub** — `handleHub` in subdomain mode, or `handlePathNamespace` in path mode (`routing_mode=path`: services at `/<slug>/`, prefix stripped, `tn_route` affinity cookie).
 - otherwise → **service**: `registry.lookup(full)` → session proxy. Service hosts are `<slug>-<ns>.<domain>` (flat) or `<slug>.<ns>.<domain>` (nested).
 
 ```mermaid

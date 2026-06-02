@@ -1,0 +1,40 @@
+# Cloudflare proxied (orange cloud) — Cloudflare does all public TLS — NO Traefik.
+#
+# Cloudflare DNS (zone ur.link), both proxied (orange 🟠):
+#   *.t        -> your server IP        (needs Advanced Certificate Manager for the
+#   connect.t  -> your server IP         two-level wildcard *.t.ur.link; or use base
+#                                        domain ur.link for free Universal SSL)
+#
+# Cloudflare → SSL/TLS → Overview:
+#   • Flexible  : CF↔origin is plain HTTP → this file as-is (tls-mode=off, :80).
+#                 Firewall the origin to Cloudflare's IP ranges; the CF↔origin hop
+#                 is unencrypted otherwise.
+#   • Full(strict) (recommended): create a free Cloudflare Origin Certificate,
+#                 mount it, and switch to tls-mode=file (see the commented block).
+#
+# WebSockets pass through Cloudflare's proxy, so control rides wss://connect.t.ur.link.
+#   DOMAIN=t.ur.link docker compose -f deploy/cloudflare/docker-compose.proxied.yml up -d
+services:
+  tunnel:
+    image: ghcr.io/ur-link/tunnel:latest
+    container_name: tunnel
+    restart: unless-stopped
+    command: ["server"]
+    environment:
+      TUNNEL_DOMAIN: ${DOMAIN:-t.ur.link}
+      TUNNEL_TLS_MODE: "off"        # Cloudflare terminates TLS (Flexible)
+      TUNNEL_TRUST_FORWARDED: "true" # honor Cloudflare's X-Forwarded-Proto=https
+      TUNNEL_HTTP_ADDR: ":80"
+      TUNNEL_TOKENS_FILE: /etc/tunnel/tokens
+      TUNNEL_LOG_FORMAT: json
+      # --- Full(strict) variant: serve a Cloudflare Origin Cert instead of plain HTTP ---
+      # TUNNEL_TLS_MODE: file
+      # TUNNEL_TLS_CERT_FILE: /etc/tunnel/certs/origin.pem
+      # TUNNEL_TLS_KEY_FILE: /etc/tunnel/certs/origin.key
+    ports:
+      - "80:80" # CF (Flexible) connects here; also wss://connect.<domain> control
+      # - "443:443" # uncomment for the Full(strict) origin-cert variant
+    volumes:
+      - ./tunnel:/etc/tunnel:ro # tokens (+ certs/ for the Full-strict variant)
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
